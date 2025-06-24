@@ -14,10 +14,12 @@ import (
 
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
-	"github.com/edgexfoundry/device-virtual-go/internal/config"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
+	"github.com/linjuya-lu/device-lpmp-go/internal/config"
+	"github.com/linjuya-lu/device-lpmp-go/internal/frameparser"
+	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
 type VirtualDriver struct {
@@ -64,24 +66,64 @@ func (d *VirtualDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *VirtualDriver) Start() error {
-	// 硬编码配置文件路径
+	// —— 0. 配置文件和串口参数（可以硬编码，也可从 d.config 读取）
 	const (
-		devicesPath = "cmd/res/devices/devices.yaml"
+		devicesYAML = "cmd/res/devices/devices.yaml"
 		profilesDir = "cmd/res/profiles"
 	)
-
-	// 先一次性加载所有静态资源定义和默认初始值
-	if err := config.InitDeviceResources(devicesPath, profilesDir); err != nil {
+	// portName := d.config.PortName   // e.g. "/dev/ttyUSB0"
+	// baudRate := d.config.BaudRate   // e.g. 115200
+	portName := "/dev/ttyUSB0"
+	baudRate := 115200
+	// —— 1. 初始化静态资源定义 + 默认初始值
+	if err := config.InitDeviceResources(devicesYAML, profilesDir); err != nil {
 		return fmt.Errorf("初始化设备资源失败: %w", err)
 	}
 
-	devices := d.sdk.Devices()
-	for _, device := range devices {
-		err := prepareVirtualResources(d, device.Name)
-		if err != nil {
-			return fmt.Errorf("failed to prepare virtual resources: %v", err)
+	// —— 2. 为每台设备准备虚拟资源（在 valuesMap 中分配槽位）
+	for _, dev := range d.sdk.Devices() {
+		if err := prepareVirtualResources(d, dev.Name); err != nil {
+			return fmt.Errorf("prepareVirtualResources(%s) 失败: %w", dev.Name, err)
 		}
 	}
+
+	// —— 3. 打开串口
+	serialPort, err := serial.Open(portName, baudRate)
+	if err != nil {
+		return fmt.Errorf("打开串口 %s 失败: %w", portName, err)
+	}
+
+	// —— 4. 启动 AT+DRX 监听
+	frameCh := make(chan []byte, 100)
+	serial.StartDRXListener(serialPort, frameCh)
+
+	// —— 5. 启动解析协程：从 frameCh 取原始帧，交给切帧 + 业务解析
+	go func() {
+		var backlog []byte
+		for raw := range frameCh {
+			backlog = append(backlog, raw...)
+			// 不断尝试切帧
+			for {
+				frame, rest, err := frameparser.Parse(backlog)
+				if err != nil {
+					// 协议错误：丢弃整个缓存
+					backlog = rest
+					break
+				}
+				if frame == nil {
+					// 半帧不足，保留缓存
+					backlog = rest
+					break
+				}
+				// 业务 TLV／浮点／整型解析，返回 map[resourceName]value
+				values := frameparser.ParseBusiness(frame)
+				for name, val := range values {
+					config.SetDeviceValue(frameparser.DeviceName(frame), name, val)
+				}
+				backlog = rest
+			}
+		}
+	}()
 
 	return nil
 }

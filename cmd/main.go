@@ -9,12 +9,12 @@ package main
 import (
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/startup"
 
-	"github.com/edgexfoundry/device-virtual-go"
-	"github.com/edgexfoundry/device-virtual-go/internal/driver"
+	device_virtual "github.com/edgexfoundry/device-virtual-go"
+	"github.com/linjuya-lu/device-lpmp-go/internal/driver"
 )
 
 const (
-	serviceName string = "device-virtual"
+	serviceName string = "device-lpmp"
 )
 
 func main() {
