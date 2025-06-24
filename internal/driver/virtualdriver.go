@@ -14,6 +14,7 @@ import (
 
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
+	"github.com/edgexfoundry/device-virtual-go/internal/config"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
@@ -63,6 +64,17 @@ func (d *VirtualDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *VirtualDriver) Start() error {
+	// 硬编码配置文件路径
+	const (
+		devicesPath = "cmd/res/devices/devices.yaml"
+		profilesDir = "cmd/res/profiles"
+	)
+
+	// 先一次性加载所有静态资源定义和默认初始值
+	if err := config.InitDeviceResources(devicesPath, profilesDir); err != nil {
+		return fmt.Errorf("初始化设备资源失败: %w", err)
+	}
+
 	devices := d.sdk.Devices()
 	for _, device := range devices {
 		err := prepareVirtualResources(d, device.Name)
