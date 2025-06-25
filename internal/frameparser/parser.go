@@ -3,7 +3,6 @@ package frameparser
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"strings"
 
@@ -27,11 +26,21 @@ func StartParser(frameCh <-chan []byte) {
 				log.Println("帧长度不足，跳过解析")
 				continue
 			}
-
+			// CRC 校验：最后 2 字节为 CRC-16
+			payload := frame[:len(frame)-2]
+			recvCRC := binary.BigEndian.Uint16(frame[len(frame)-2:])
+			if CRC16(payload) != recvCRC {
+				log.Println("CRC 校验失败，跳过解析")
+				continue
+			}
 			// 1. 读取6字节SensorID，使用Hex字符串表示
 			sidBytes := frame[0:6]
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
-
+			deviceName, hasDevice := config.LookupDeviceName(sensorID)
+			if !hasDevice {
+				log.Printf("未知 SensorID=%s，跳过本帧", sensorID)
+				continue
+			}
 			// 2. 读取头部：4bit DataLen、1bit FragInd、3bit PacketType
 			head := frame[6]
 			dataCount := int(head >> 4)  // 参量个数
@@ -89,25 +98,18 @@ func StartParser(frameCh <-chan []byte) {
 				valBytes := frame[idx : idx+int(dataLen)]
 				idx += int(dataLen)
 
-				// 按长度转换基础类型
+				// 解析数据
 				if info, ok := config.LookupParamInfo(head16); ok {
 					val, err := info.Parse(valBytes)
 					if err != nil {
-						fmt.Print("❌ 参数 0x%X 解析失败: %v", paramType, err)
+						log.Printf("❌ 参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
 					} else {
-						fmt.Print("✅ %s = %v %s", info.Name, val, info.Unit)
+						// 写入运行时值表
+						config.SetDeviceValue(deviceName, info.Name, val)
+						log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 					}
 				} else {
-					fmt.Print("未找到参数类型信息 type=0x%X", paramType)
-				}
-
-				// 4. 根据SensorID分发：当前支持水位传感器ID=238A08262319
-				if sensorID == "238A08262319" {
-					if paramType == 0x1804 { // 参量码:水位=编码0x1804(6148)
-						// waterLevel字段
-						config.SetDeviceValue(sensorID, "waterLevel", val)
-						log.Printf("SensorID=%s 更新 waterLevel=%v", sensorID, val)
-					}
+					log.Printf("未找到参数类型信息 type=0x%X", paramType)
 				}
 
 				parsed++
