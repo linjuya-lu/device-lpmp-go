@@ -13,7 +13,7 @@ import (
 // 依照《Q/GDW 12184—2021》附录 D 业务报文格式，实现以下功能：
 // 1. 提取 SensorID、报文类型（仅处理业务数据：监测和告警）
 // 2. 根据 DataLen（4bit）、FragInd（1bit）、PacketType（3bit）判断是否处理
-// 3. 跳过分片帧（FragInd=1），不拼接，仅打印提示
+// 3. 跳过分片帧（FragInd=1），不拼接。 后面开协程处理
 // 4. 按照参量个数逐个解析 ParamType(14bit)+LengthFlag(2bit) + 可选长度字段 + 数据
 // 5. 将数值按表大端转换为 float32/float64/int8等基本类型
 // 6. 针对已知 SensorID（如"238A08262319"水位传感器），调用 config.SetDeviceValue 存储解析结果
@@ -67,7 +67,7 @@ func StartParser(frameCh <-chan []byte) {
 					log.Printf("参数头越界 SensorID=%s，跳过本帧", sensorID)
 					break
 				}
-				head16 := binary.BigEndian.Uint16(frame[idx : idx+2])
+				head16 := binary.LittleEndian.Uint16(frame[idx : idx+2])
 				idx += 2
 				paramType := head16 >> 2       // 14bit类型码
 				lenFlag := uint8(head16 & 0x3) // 2bit长度指示
@@ -99,7 +99,7 @@ func StartParser(frameCh <-chan []byte) {
 				idx += int(dataLen)
 
 				// 解析数据
-				if info, ok := config.LookupParamInfo(head16); ok {
+				if info, ok := config.LookupParamInfo(paramType); ok {
 					val, err := info.Parse(valBytes)
 					if err != nil {
 						log.Printf("❌ 参数 %s.%s 解析失败: %v", deviceName, info.Name, err)

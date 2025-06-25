@@ -50,8 +50,8 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 func (d *LpMpDriver) Start() error {
 	// —— 0. 配置文件和串口参数（可以硬编码，也可从 d.config 读取）
 	const (
-		devicesYAML = "cmd/res/devices/devices.yaml"
-		profilesDir = "cmd/res/profiles"
+		devicesYAML = "../cmd/res/devices/devices.yaml"
+		profilesDir = "../cmd/res/profiles"
 	)
 	portName := "/dev/ttyUSB0"
 	baudRate := 115200
@@ -79,7 +79,6 @@ func (d *LpMpDriver) Start() error {
 }
 
 func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest) (res []*dsModels.CommandValue, err error) {
-	d.locker.Lock()
 	d.locker.Lock()
 	defer d.locker.Unlock()
 
