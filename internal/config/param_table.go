@@ -1,159 +1,93 @@
 package config
 
+//附录D表
 import (
 	"encoding/binary"
-	"fmt"
-	"log"
-	"math"
+	"errors"
 )
 
-type ParamKey struct {
-	FeatureBits byte   // 高3位（参量特征）
-	CodeBits    uint16 // 低11位（类型编码）
+// Entry 表示一个参数在报文中的完整字段（不含后面的 CRC、帧头等）
+// 它只包含：
+// 1) head16：14bit 参数类型 + 2bit 长度指示位，按小端序写入报文时就是这 2 字节原样；
+// 2) data：真正的参数内容，长度固定，由 lengthFlag 决定。
+type Entry struct {
+	head16 uint16 // (ParameterType<<2 | LengthFlag), 小端序存储到报文字段
+	length int    // DataLen：0→4, 1→1, 2→2, 3→3 字节
+	data   []byte // 参数的可变内容
 }
 
-type ParamInfo struct {
-	Name     string
-	Unit     string
-	ByteLen  int
-	DataType string
-	Parse    func([]byte) (any, error)
-}
-
-var paramMap = map[ParamKey]ParamInfo{
-	{0b000, 0b00000000001}: {"长度", "m", 4, "float32", parseFloat32},
-	{0b000, 0b00000000010}: {"电池剩余电量", "%", 2, "uint16", parseAndStoreBatteryLevel},
-	{0b000, 0b00000000011}: {"voltage", "v", 4, "uint32", parseAndStoreVoltage},
-	{0b000, 0b00000000100}: {"state", "0:其它,1:正常,2:异常", 1, "uint8", parseAndStoreDeviceStatus},
-	{0b000, 0b00000000101}: {"温度", "℃", 4, "float32", parseFloat32},
-	{0b000, 0b00000000110}: {"物质的量", "mol", 4, "float32", parseFloat32},
-	{0b000, 0b00000000111}: {"发光强度", "cd", 4, "float32", parseFloat32},
-	{0b000, 0b00000001000}: {"temperature", "℃", 4, "float32", parseAndStoreTemperature},
-	{0b000, 0b00000001001}: {"humidity", "%RH", 2, "float32", parseAndStoreHumidity},
-	{0b000, 0b00000111000}: {"心跳状态", "\\", 1, "uint8", parseUint8},
-	{0b000, 0b00000111001}: {"battery-level", "%", 1, "uint8", parseUint8},
-	{0b000, 0b00010100011}: {"water-level", "m", 4, "float32", parseAndStoreLevelHeight},
-}
-
-func LookupParamInfo(paramType uint16) (ParamInfo, bool) {
-	feature := byte((paramType >> 11) & 0x07)
-	code := paramType & 0x7FF
-	fmt.Printf("🔍 TypeCode=0x%04X → Feature=%03b (0x%X), Code=%011b (0x%X)\n", paramType, feature, feature, code, code)
-
-	key := ParamKey{feature, code}
-	info, ok := paramMap[key]
-	return info, ok
-}
-
-// ===================== 通用解析函数 =====================
-
-func parseFloat32(data []byte) (any, error) {
-	if len(data) != 4 {
-		return nil, fmt.Errorf("期望4字节，实际%d", len(data))
+// 全局表：参数名 → *Entry
+var (
+	table = map[string]*Entry{
+		// 以下举例：假设有两个参数 "Temperature" 和 "Humidity"
+		// 它们在协议里定义的 ParameterType 和 LengthFlag 已知：
+		//  Temperature: 类型码 0x0005, 长度标志 0 → 数据固定 4 字节
+		//  Humidity:    类型码 0x0009, 长度标志 1 → 数据固定 1 字节
+		"Temperature": {
+			head16: binary.LittleEndian.Uint16([]byte{0b00000101<<2 | 0b00, 0}), // (0x0005<<2)|0
+			length: 4,
+			data:   make([]byte, 4),
+		},
+		"Humidity": {
+			head16: binary.LittleEndian.Uint16([]byte{0b00001001<<2 | 0b01, 0}), // (0x0009<<2)|1
+			length: 1,
+			data:   make([]byte, 1),
+		},
+		// 按照你的协议表继续添加……
 	}
-	bits := binary.LittleEndian.Uint32(data)
-	val := math.Float32frombits(bits)
-	return val, nil
+)
+
+// UpdateData 用于并发安全地更新某个参数的 data 内容
+// 要求 len(value) == entry.length，否则报错；
+// data 会被完整拷贝到内部存储。
+func UpdateData(name string, value []byte) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	e, ok := table[name]
+	if !ok {
+		return errors.New("unknown parameter: " + name)
+	}
+	if len(value) != e.length {
+		return errors.New("invalid data length for " + name)
+	}
+	// 拷贝到内部
+	copy(e.data, value)
+	return nil
 }
 
-func parseUint32(data []byte) (any, error) {
-	if len(data) != 4 {
-		return nil, fmt.Errorf("期望4字节，实际%d", len(data))
+// GetPacketFields 返回当前全量“头域+数据域”组合后的字节切片副本，map[key]=[]byte{head16_lo, head16_hi, ...data}
+// head16 按小端序存储在前面 2 字节，后面紧跟 data。
+func GetPacketFields() map[string][]byte {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	out := make(map[string][]byte, len(table))
+	for name, e := range table {
+		buf := make([]byte, 2+e.length)
+		// 2 字节小端序 head16
+		binary.LittleEndian.PutUint16(buf[0:2], e.head16)
+		// 紧跟 data
+		copy(buf[2:], e.data)
+		out[name] = buf
 	}
-	return binary.LittleEndian.Uint32(data), nil
+	return out
 }
 
-func parseUint8(data []byte) (any, error) {
-	if len(data) != 1 {
-		return nil, fmt.Errorf("期望1字节，实际%d", len(data))
+// GetEntryCopy 返回某个参数的当前 Entry 副本，包含 head16、length 和 data 副本
+func GetEntryCopy(name string) (Entry, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	e, ok := table[name]
+	if !ok {
+		return Entry{}, errors.New("unknown parameter: " + name)
 	}
-	return uint8(data[0]), nil
-}
-
-func parseUint16(data []byte) (any, error) {
-	if len(data) != 2 {
-		return nil, fmt.Errorf("期望2字节，实际%d", len(data))
-	}
-	return binary.LittleEndian.Uint16(data), nil
-}
-
-func parseAndStoreTemperature(data []byte) (any, error) {
-	valAny, err := parseFloat32(data)
-	if err != nil {
-		return nil, err
-	}
-	val := valAny.(float32)
-
-	return val, nil
-}
-
-func parseAndStoreHumidity(data []byte) (any, error) {
-	if len(data) != 2 {
-		return nil, fmt.Errorf("期望2字节，实际%d", len(data))
-	}
-	val := float32(binary.LittleEndian.Uint16(data))
-
-	return val, nil
-}
-
-func parseAndStoreVoltage(data []byte) (any, error) {
-	if len(data) < 4 {
-		return nil, fmt.Errorf("数据长度不足，期望 4 字节，实际 %d 字节", len(data))
-	}
-
-	bits := binary.LittleEndian.Uint32(data[:4])
-	val := math.Float32frombits(bits)
-
-	log.Printf("🔋 电池电压解析结果：%.4f V", val)
-
-	return val, nil
-}
-
-func parseAndStoreBatteryLevel(data []byte) (any, error) {
-	if len(data) < 2 {
-		return nil, fmt.Errorf("数据长度不足，期望 2 字节，实际 %d 字节", len(data))
-	}
-
-	val := binary.LittleEndian.Uint16(data[:2])
-
-	log.Printf("🔋 电池剩余电量解析结果：%d%%", val)
-
-	return val, nil
-}
-
-func parseAndStoreDeviceStatus(data []byte) (any, error) {
-	if len(data) < 1 {
-		return nil, fmt.Errorf("数据长度不足，期望 1 字节，实际 %d 字节", len(data))
-	}
-
-	val := data[0]
-
-	var statusDesc string
-	switch val {
-	case 0:
-		statusDesc = "其它"
-	case 1:
-		statusDesc = "正常"
-	case 2:
-		statusDesc = "异常"
-	default:
-		statusDesc = "未知"
-	}
-
-	log.Printf("📡 设备状态解析结果：%d（%s）", val, statusDesc)
-
-	return val, nil
-}
-
-func parseAndStoreLevelHeight(data []byte) (any, error) {
-	if len(data) < 4 {
-		return nil, fmt.Errorf("数据长度不足，期望 4 字节，实际 %d 字节", len(data))
-	}
-
-	bits := binary.LittleEndian.Uint32(data[:4])
-	val := math.Float32frombits(bits)
-
-	log.Printf("📏 液位高度解析结果：%.3f m", val)
-
-	return val, nil
+	dataCopy := make([]byte, len(e.data))
+	copy(dataCopy, e.data)
+	return Entry{
+		head16: e.head16,
+		length: e.length,
+		data:   dataCopy,
+	}, nil
 }
