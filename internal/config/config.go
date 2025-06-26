@@ -153,3 +153,25 @@ func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
 	}
 	return copyMap, true
 }
+
+// CopyDeviceValues 复制 valuesMap 中 srcDevice 的所有资源值到 dstDevice
+func CopyDeviceValues(srcDevice, dstDevice string) error {
+	mu.Lock() // 如果你在并发场景下要保护全局 map
+	defer mu.Unlock()
+
+	// 1. 检查源设备是否存在
+	srcMap, ok := valuesMap[srcDevice]
+	if !ok {
+		return fmt.Errorf("源设备 %s 不存在", srcDevice)
+	}
+
+	// 2. 创建并填充新的内层 map（浅拷贝）
+	newMap := make(map[string]interface{}, len(srcMap))
+	for resource, val := range srcMap {
+		newMap[resource] = val
+	}
+
+	// 3. 把新 map 挂到 dstDevice
+	valuesMap[dstDevice] = newMap
+	return nil
+}

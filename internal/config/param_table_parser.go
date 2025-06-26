@@ -22,7 +22,7 @@ type ParamInfo struct {
 
 var paramMap = map[ParamKey]ParamInfo{
 	{0b000, 0b00000000001}: {"长度", "m", 4, "float32", parseFloat32},
-	{0b000, 0b00000000010}: {"电池剩余电量", "%", 2, "uint16", parseAndStoreBatteryLevel},
+	{0b000, 0b00000000010}: {"battery-level", "%", 2, "uint16", parseAndStoreBatteryLevel},
 	{0b000, 0b00000000011}: {"voltage", "v", 4, "uint32", parseAndStoreVoltage},
 	{0b000, 0b00000000100}: {"state", "0:其它,1:正常,2:异常", 1, "uint8", parseAndStoreDeviceStatus},
 	{0b000, 0b00000000101}: {"温度", "℃", 4, "float32", parseFloat32},

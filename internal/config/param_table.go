@@ -11,9 +11,9 @@ import (
 // 1) head16：14bit 参数类型 + 2bit 长度指示位，按小端序写入报文时就是这 2 字节原样；
 // 2) data：真正的参数内容，长度固定，由 lengthFlag 决定。
 type Entry struct {
-	head16 uint16 // (ParameterType<<2 | LengthFlag), 小端序存储到报文字段
-	length int    // DataLen：0→4, 1→1, 2→2, 3→3 字节
-	data   []byte // 参数的可变内容
+	Head16 uint16 // (ParameterType<<2 | LengthFlag), 小端序存储到报文字段
+	Length int    // DataLen：0→4, 1→1, 2→2, 3→3 字节
+	Data   []byte // 参数的可变内容
 }
 
 // 全局表：参数名 → *Entry
@@ -24,14 +24,14 @@ var (
 		//  Temperature: 类型码 0x0005, 长度标志 0 → 数据固定 4 字节
 		//  Humidity:    类型码 0x0009, 长度标志 1 → 数据固定 1 字节
 		"Temperature": {
-			head16: binary.LittleEndian.Uint16([]byte{0b00000101<<2 | 0b00, 0}), // (0x0005<<2)|0
-			length: 4,
-			data:   make([]byte, 4),
+			Head16: binary.LittleEndian.Uint16([]byte{0b00000101<<2 | 0b00, 0}), // (0x0005<<2)|0
+			Length: 4,
+			Data:   make([]byte, 4),
 		},
 		"Humidity": {
-			head16: binary.LittleEndian.Uint16([]byte{0b00001001<<2 | 0b01, 0}), // (0x0009<<2)|1
-			length: 1,
-			data:   make([]byte, 1),
+			Head16: binary.LittleEndian.Uint16([]byte{0b00001001<<2 | 0b01, 0}), // (0x0009<<2)|1
+			Length: 1,
+			Data:   make([]byte, 1),
 		},
 		// 按照你的协议表继续添加……
 	}
@@ -48,11 +48,11 @@ func UpdateData(name string, value []byte) error {
 	if !ok {
 		return errors.New("unknown parameter: " + name)
 	}
-	if len(value) != e.length {
+	if len(value) != e.Length {
 		return errors.New("invalid data length for " + name)
 	}
 	// 拷贝到内部
-	copy(e.data, value)
+	copy(e.Data, value)
 	return nil
 }
 
@@ -64,11 +64,11 @@ func GetPacketFields() map[string][]byte {
 
 	out := make(map[string][]byte, len(table))
 	for name, e := range table {
-		buf := make([]byte, 2+e.length)
+		buf := make([]byte, 2+e.Length)
 		// 2 字节小端序 head16
-		binary.LittleEndian.PutUint16(buf[0:2], e.head16)
+		binary.LittleEndian.PutUint16(buf[0:2], e.Head16)
 		// 紧跟 data
-		copy(buf[2:], e.data)
+		copy(buf[2:], e.Data)
 		out[name] = buf
 	}
 	return out
@@ -83,11 +83,11 @@ func GetEntryCopy(name string) (Entry, error) {
 	if !ok {
 		return Entry{}, errors.New("unknown parameter: " + name)
 	}
-	dataCopy := make([]byte, len(e.data))
-	copy(dataCopy, e.data)
+	dataCopy := make([]byte, len(e.Data))
+	copy(dataCopy, e.Data)
 	return Entry{
-		head16: e.head16,
-		length: e.length,
-		data:   dataCopy,
+		Head16: e.Head16,
+		Length: e.Length,
+		Data:   dataCopy,
 	}, nil
 }

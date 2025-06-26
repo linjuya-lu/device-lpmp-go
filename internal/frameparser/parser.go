@@ -11,9 +11,9 @@ import (
 
 // StartParser 从 frameCh 通道中持续读取完整帧，启动一个后台协程进行业务数据解析。
 // 依照《Q/GDW 12184—2021》附录 D 业务报文格式，实现以下功能：
-// 1. 提取 SensorID、报文类型（仅处理业务数据：监测和告警）
+// 1. 提取 SensorID、报文类型（仅处理业务数据：监测和告警）  控制报文与控制报文响应单独函数处理
 // 2. 根据 DataLen（4bit）、FragInd（1bit）、PacketType（3bit）判断是否处理
-// 3. 跳过分片帧（FragInd=1），不拼接。 后面开协程处理
+// 3. 分片帧（FragInd=1）开协程处理
 // 4. 按照参量个数逐个解析 ParamType(14bit)+LengthFlag(2bit) + 可选长度字段 + 数据
 // 5. 将数值按表大端转换为 float32/float64/int8等基本类型
 // 6. 针对已知 SensorID（如"238A08262319"水位传感器），调用 config.SetDeviceValue 存储解析结果
@@ -46,9 +46,21 @@ func StartParser(frameCh <-chan []byte) {
 			dataCount := int(head >> 4)  // 参量个数
 			fragInd := (head >> 3) & 0x1 // 分片指示
 			packetType := head & 0x07    // 报文类型
-
+			body := make([]byte, len(frame)-2-7)
+			copy(body, frame[7:len(frame)-2])
+			frame_ctl := FrameCtl{
+				SensorID:   sensorID,
+				DataLen:    dataCount,
+				FragInd:    fragInd,
+				PacketType: packetType,
+				Payload:    body,
+				Check:      recvCRC,
+			}
 			// 只处理业务数据报文（监测=0、告警=2）
 			if packetType != 0 && packetType != 2 {
+				if packetType == 4 || packetType == 5 {
+					handle_frame_ctl(frame_ctl)
+				}
 				continue
 			}
 

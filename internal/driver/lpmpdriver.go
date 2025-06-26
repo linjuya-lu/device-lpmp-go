@@ -9,13 +9,13 @@ package driver
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
-	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 	"github.com/linjuya-lu/device-lpmp-go/internal/frameparser"
@@ -152,56 +152,40 @@ func (d *LpMpDriver) Stop(force bool) error {
 
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("a new Device is added: %s", deviceName)
-	err := prepareVirtualResources(d, deviceName)
-	return err
+	if err := config.CopyDeviceValues(deviceName, deviceName); err != nil {
+		log.Fatalf("复制设备值失败：%v", err)
+	}
+	d.lc.Info("已将设备 %s 的所有资源值复制到 %s", deviceName, deviceName)
+	return nil
 }
 
 func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("Device %s is updated", deviceName)
-	err := prepareVirtualResources(d, deviceName)
-	return err
+
+	// 1. 清空旧的运行时值表
+	// config.DeleteDeviceValues(deviceName)
+
+	// 2. 从“模板”或默认条目中浅拷贝新值到 deviceName
+	//    假设你维护了一个名为 "deviceDefault" 的模板设备
+	if err := config.CopyDeviceValues("deviceDefault", deviceName); err != nil {
+		d.lc.Errorf("更新设备 %s 值失败: %v", deviceName, err)
+		return err
+	}
+
+	d.lc.Infof("已刷新设备 %s 的资源值为最新默认配置", deviceName)
+	return nil
 }
 
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	d.lc.Debugf("Device %s is removed", deviceName)
 
-	return nil
-}
+	// // 1. 删除运行时值表
+	// config.DeleteDeviceValues(deviceName)
 
-func prepareVirtualResources(driver *LpMpDriver, deviceName string) error {
-	driver.locker.Lock()
-	defer driver.locker.Unlock()
+	// // 2. 删除 sensorID 到 deviceName 的所有映射
+	// config.DeleteSensorIDMappingsByDevice(deviceName)
 
-	device, err := driver.sdk.GetDeviceByName(deviceName)
-	if err != nil {
-		return err
-	}
-	if device.ProfileName == "" {
-		return nil
-	}
-	profile, err := driver.sdk.GetProfileByName(device.ProfileName)
-	if err != nil {
-		return err
-	}
-
-	for _, dr := range profile.DeviceResources {
-		if dr.Properties.ReadWrite == common.ReadWrite_R || dr.Properties.ReadWrite == common.ReadWrite_RW {
-			/*
-				d.Name <-> VIRTUAL_RESOURCE.deviceName
-				dr.Name <-> VIRTUAL_RESOURCE.CommandName, VIRTUAL_RESOURCE.ResourceName
-				ro.DeviceResource <-> VIRTUAL_RESOURCE.DeviceResourceName
-				dr.Properties.Value.Type <-> VIRTUAL_RESOURCE.DataType
-				dr.Properties.Value.DefaultValue <-> VIRTUAL_RESOURCE.Value
-			*/
-			if dr.Properties.ValueType == common.ValueTypeBinary {
-				continue
-			}
-
-		}
-		// TODO another for loop to update the ENABLE_RANDOMIZATION field of virtual resource by device resource
-		//  "EnableRandomization_{ResourceName}"
-	}
-
+	d.lc.Infof("已移除设备 %s 的所有运行时数据和映射", deviceName)
 	return nil
 }
 
