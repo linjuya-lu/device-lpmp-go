@@ -51,7 +51,7 @@ func StartParser(frameCh <-chan []byte) {
 			frame_ctl := FrameCtl{
 				SensorID:   sensorID,
 				DataLen:    dataCount,
-				FragInd:    fragInd,
+				FragInd:    fragInd ,
 				PacketType: packetType,
 				Payload:    body,
 				Check:      recvCRC,

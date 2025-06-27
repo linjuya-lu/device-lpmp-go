@@ -43,14 +43,12 @@ var reassembleTimeout = 20 * time.Second
 // 若非分片帧 (FragInd != 1)，直接通过通道发送，不进入缓存流程。
 // 若是分片帧，根据是否已有缓存及片段类型分别处理：
 // 首片处理： 创建新的缓存结构，初始化期望序号和数据缓冲，并启动超时定时器
-// biaozhuns.com
-// 。
 // 重复首片或新消息首片冲突： 如已存在缓存，遇到新的首片，根据 SSEQ 判定是同一消息的重发还是新的消息开始，从而决定是重置当前缓存重新开始，还是丢弃旧缓存转入新消息的拼接。
 // 中间/尾片处理： 检查 PSEQ 与期望序号的关系，采取顺序拼接、乱序暂存或重复忽略等措施，确保数据按序整合。收到尾片时记录最后序号，在确定所有片段齐全后进行最终拼装。
 func ProcessFrame(frame *Frame) {
 	// 如果不是分片帧，直接转发给下一阶段解析
 	if frame.FragInd != 1 {
-		FrameCh <- frame // 假设frameCh为全局帧通道，StartParser从此通道读取
+		FrameCh <- frame
 		return
 	}
 
@@ -196,13 +194,13 @@ func ProcessFrame(frame *Frame) {
 	}
 }
 
-// 辅助函数：判断Flag是否标识首片 (2-bit 值 == 00)
+// 判断Flag是否标识首片 (2-bit 值 == 00)
 func isFlagFirst(flag uint8) bool {
 	// 低2位为标志位，00表示首片
 	return flag&0x3 == 0x0
 }
 
-// 辅助函数：判断Flag是否标识尾片 (2-bit 值 == 11)
+// 判断Flag是否标识尾片 (2-bit 值 == 11)
 func isFlagLast(flag uint8) bool {
 	return flag&0x3 == 0x3
 }

@@ -41,3 +41,30 @@ deviceResources:
       readWrite: "R"
       units: "code"
       defaultValue: "0"
+
+  - name: "EID"
+    isHidden: false                    
+    description: "设备唯一标识"
+    properties:
+      valueType: "String"            
+      readWrite: "RW"                 
+      units: ""                      
+      defaultValue: ""               
+
+  - name: "reset-command"   # ——— 复位控制命令 ———
+    isHidden: false
+    description: "复位控制命令(写1触发复位)"
+    properties:
+      valueType: "Uint8"    # 用 1 字节来表示操作码
+      readWrite: "RW"        # 向设备下发复位指令
+      units: ""            
+      defaultValue: "0"     # 默认不触发
+
+  - name: "reset-response"  # ——— 复位响应状态 ———
+    isHidden: false
+    description: "复位响应状态(0=失败,1=成功)"
+    properties:
+      valueType: "Uint8"    # 1 字节状态码
+      readWrite: "R"        # 只读，驱动收到设备反馈后填入
+      units: "code"
+      defaultValue: "0"     # 默认失败

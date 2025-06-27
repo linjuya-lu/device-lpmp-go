@@ -32,7 +32,7 @@ type LpMpDriver struct {
 var once sync.Once
 var driver *LpMpDriver
 
-func NewVirtualDeviceDriver() interfaces.ProtocolDriver {
+func LpMpDeviceDriver() interfaces.ProtocolDriver {
 	once.Do(func() {
 		driver = new(LpMpDriver)
 	})

@@ -18,6 +18,6 @@ const (
 )
 
 func main() {
-	d := driver.NewVirtualDeviceDriver()
+	d := driver.LpMpDeviceDriver()
 	startup.Bootstrap(serviceName, device_virtual.Version, d)
 }
