@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
-// Frame 表示数据帧的结构，假设已有定义。
+// FrameSharing 表示数据帧的结构，假设已有定义。
 // 其中包含SensorID（6字节）、FragInd（是否为分片帧指示）、SSEQ（业务单元序号）、
 // PSEQ（分片序号）、Flag（片段标志）、Data（负载数据）等字段。
-type Frame struct {
+type FrameSharing struct {
 	SensorID [6]byte // 传感器ID，6字节唯一标识传感器
 	FragInd  uint8   // 分片指示: 1表示分片帧, 0表示完整帧
 	SSEQ     uint8   // 业务单元序号 (6 bit有效位, 这里用byte表示0-63范围的值)
@@ -32,8 +32,8 @@ type SDUCache struct {
 var (
 	sduCacheMap = make(map[[6]byte]*SDUCache)
 	cacheMu     sync.Mutex
-	// 这个通道用来把重组/未分片的 Frame 推给 StartParser 或上层逻辑
-	FrameCh = make(chan *Frame, 100)
+	// 这个通道用来把重组/未分片的 FrameSharing 推给 StartParser 或上层逻辑
+	FrameCh = make(chan *FrameSharing, 100)
 )
 
 // 可配置的拼接超时时间，默认20秒
@@ -45,7 +45,7 @@ var reassembleTimeout = 20 * time.Second
 // 首片处理： 创建新的缓存结构，初始化期望序号和数据缓冲，并启动超时定时器
 // 重复首片或新消息首片冲突： 如已存在缓存，遇到新的首片，根据 SSEQ 判定是同一消息的重发还是新的消息开始，从而决定是重置当前缓存重新开始，还是丢弃旧缓存转入新消息的拼接。
 // 中间/尾片处理： 检查 PSEQ 与期望序号的关系，采取顺序拼接、乱序暂存或重复忽略等措施，确保数据按序整合。收到尾片时记录最后序号，在确定所有片段齐全后进行最终拼装。
-func ProcessFrame(frame *Frame) {
+func ProcessFrame(frame *FrameSharing) {
 	// 如果不是分片帧，直接转发给下一阶段解析
 	if frame.FragInd != 1 {
 		FrameCh <- frame
@@ -242,7 +242,7 @@ func finalizeAndOutput(sensorID [6]byte, cache *SDUCache) {
 	delete(sduCacheMap, sensorID)
 
 	// 构造新的Frame，内容与首片帧类似但标记为非分片
-	fullFrame := &Frame{
+	fullFrame := &FrameSharing{
 		SensorID: sensorID,         // **注意**：这里需要获取SensorID，本例中可以从传入参数sensorID获得或缓存中存储
 		FragInd:  0,                // 标记为完整帧
 		SSEQ:     cache.SSEQ,       // 沿用业务单元序号（可选，看后续解析是否需要）

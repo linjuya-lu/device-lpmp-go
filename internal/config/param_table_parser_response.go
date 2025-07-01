@@ -1,0 +1,139 @@
+package config
+
+import (
+	"encoding/binary"
+	"log"
+	"time"
+)
+
+// Frame 代表“通用传感器报文”
+type Frame struct {
+	SensorID   string      // 传感器 ID，6 字节
+	DataLen    int         // 参量个数，使用下位 4 位即可，或者直接用 uint32 存放 m
+	FragInd    byte        // 分片指示，true=已分片, false=未分片
+	PacketType byte        // 报文类型，3 字节，例：0x00,0x01,0x00 表示类型 100
+	Payload    interface{} // 报文内容，接收端可根据 PacketType 做类型断言
+	Check      uint16      // 校验位，2 字节 CRC
+}
+
+type ResponseKey struct {
+	// 控制报文类型：只用低 7 位
+	CtrlType uint8
+	// 参数配置类型标识：1 bit，0/1
+	RequestSetFlag bool
+}
+
+type ResponseHandle struct {
+	Parse func(data []byte, frameCtl Frame) error
+}
+
+var ResponseMap = map[ResponseKey]ResponseHandle{
+	{CtrlType: 0x01, RequestSetFlag: false}: {common_para_response},
+	{CtrlType: 0x01, RequestSetFlag: true}:  {common_para_response},
+	{CtrlType: 0x04, RequestSetFlag: true}:  {timestamp_response},
+	{CtrlType: 0x04, RequestSetFlag: true}:  {timestamp_response},
+	{CtrlType: 0x06, RequestSetFlag: true}:  {reset_response},
+	{CtrlType: 0x06, RequestSetFlag: true}:  {reset_response},
+}
+
+func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
+	ctrlType := head >> 1
+	requestSet := (head & 0x1) == 1
+	key := ResponseKey{ctrlType, requestSet}
+	handle, ok := ResponseMap[key]
+	return handle, ok
+}
+
+// ===================== 通用解析函数 =====================
+
+// 通用参数查询/设置
+func common_para_response(data []byte, frameCtl Frame) error {
+	idx := 0
+	parsed := 0
+	for parsed < frameCtl.DataLen {
+		// 参数头2字节
+		if idx+2 > len(data)-2 {
+			log.Printf("参数头越界 SensorID=%s，跳过本帧", frameCtl.SensorID)
+			break
+		}
+		head16 := binary.LittleEndian.Uint16(data[idx : idx+2])
+		idx += 2
+		paramType := head16 >> 2       // 14bit类型码
+		lenFlag := uint8(head16 & 0x3) // 2bit长度指示
+
+		// 计算真实数据长度
+		var dataLen uint32
+		switch lenFlag {
+		case 0:
+			dataLen = 4 // 默认4字节
+		case 1:
+			dataLen = uint32(data[idx])
+			idx++
+		case 2:
+			dataLen = uint32(binary.BigEndian.Uint16(data[idx : idx+2]))
+			idx += 2
+		case 3:
+			dataLen = uint32(data[idx])<<16 | uint32(data[idx+1])<<8 | uint32(data[idx+2])
+			idx += 3
+		}
+
+		// 数据越界校验
+		if idx+int(dataLen) > len(data)-2 {
+			log.Printf("参数数据越界 SensorID=%s，跳过本帧", frameCtl.SensorID)
+			break
+		}
+
+		// 提取原始值字节
+		valBytes := data[idx : idx+int(dataLen)]
+		idx += int(dataLen)
+
+		deviceName, hasDevice := LookupDeviceName(frameCtl.SensorID)
+		if !hasDevice {
+			log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
+			continue
+		}
+		// 解析数据
+		if info, ok := LookupParamInfo(paramType); ok {
+			val, err := info.Parse(valBytes)
+			if err != nil {
+				log.Printf("❌ 参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
+			} else {
+				// 写入运行时值表
+				SetDeviceValue(deviceName, info.Name, val)
+				log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+			}
+		} else {
+			log.Printf("未找到参数类型信息 type=0x%X", paramType)
+		}
+
+		parsed++
+	}
+	return nil
+}
+
+// 时间参数查询/设置
+func timestamp_response(data []byte, frameCtl Frame) error {
+
+	secs := binary.LittleEndian.Uint32(data)
+	// 转换为本地时区时间
+	t := time.Unix(int64(secs), 0)
+	deviceName, hasDevice := LookupDeviceName(frameCtl.SensorID)
+	if !hasDevice {
+		log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
+	}
+	timestamp_ctl := "timestamp"
+	SetDeviceValue(deviceName, timestamp_ctl, t)
+	return nil
+}
+
+// 复位设置
+func reset_response(data []byte, frameCtl Frame) error {
+
+	deviceName, hasDevice := LookupDeviceName(frameCtl.SensorID)
+	if !hasDevice {
+		log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
+	}
+	reset_ctl := "reset_ctl"
+	SetDeviceValue(deviceName, reset_ctl, data[0])
+	return nil
+}
