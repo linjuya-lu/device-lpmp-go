@@ -73,6 +73,8 @@ func (d *LpMpDriver) Start() error {
 
 	// —— 4. 解析协程
 	frameparser.StartParser(frameCh)
+	//打开写协程
+	serial.StartWriteWorker(serialPort)
 
 	d.lc.Infof("串口监听和解析已启动")
 	return nil

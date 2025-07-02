@@ -8,12 +8,27 @@ import (
 
 // Frame 代表“通用传感器报文”
 type Frame struct {
-	SensorID   string      // 传感器 ID，6 字节
-	DataLen    int         // 参量个数，使用下位 4 位即可，或者直接用 uint32 存放 m
-	FragInd    byte        // 分片指示，true=已分片, false=未分片
-	PacketType byte        // 报文类型，3 字节，例：0x00,0x01,0x00 表示类型 100
-	Payload    interface{} // 报文内容，接收端可根据 PacketType 做类型断言
-	Check      uint16      // 校验位，2 字节 CRC
+	SensorID   string // 传感器 ID，6 字节
+	DataLen    byte   // 参量个数，使用下位 4 位即可，或者直接用 uint32 存放 m
+	FragInd    byte   // 分片指示，true=已分片, false=未分片
+	PacketType byte   // 报文类型，3 字节，例：0x00,0x01,0x00 表示类型 100
+	Payload    []byte // 报文内容
+	Check      uint16 // 校验位，2 字节 CRC
+}
+
+// Bytes 按你的协议格式把 Frame 转成 []byte
+func (f *Frame) Bytes() []byte {
+	buf := make([]byte, 0, 6+1+1+1+len(f.Payload)+2)
+	buf = append(buf, f.SensorID[:]...)
+	buf = append(buf, f.DataLen)
+	// flags：高4位 DataLen，下一位 FragInd，低3位 PacketType
+	flags := (f.DataLen << 4) | byte(f.FragInd<<3) | byte(f.PacketType)
+	buf = append(buf, flags)
+	buf = append(buf, f.Payload...)
+	// CRC16 要先转成大/小端两字节，比如小端：
+	crc := []byte{byte(f.Check), byte(f.Check >> 8)}
+	buf = append(buf, crc...)
+	return buf
 }
 
 type ResponseKey struct {
@@ -50,7 +65,7 @@ func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
 func common_para_response(data []byte, frameCtl Frame) error {
 	idx := 0
 	parsed := 0
-	for parsed < frameCtl.DataLen {
+	for parsed < int(frameCtl.DataLen) {
 		// 参数头2字节
 		if idx+2 > len(data)-2 {
 			log.Printf("参数头越界 SensorID=%s，跳过本帧", frameCtl.SensorID)

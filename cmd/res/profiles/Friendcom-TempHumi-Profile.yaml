@@ -77,3 +77,15 @@ deviceResources:
       readWrite: "R"        # 只读，驱动收到设备反馈后填入
       units: "code"
       defaultValue: "0"     # 默认失败
+
+  - name: "command-json"   # ——— 复位控制命令 ———
+    isHidden: false
+    description: "控制命令"
+    properties:
+      valueType: "Object"    # 用 1 字节来表示操作码
+      readWrite: "RW"        # 向设备下发复位指令
+      units: ""            
+      defaultValue: "0"     # 默认不触发
+
+
+      

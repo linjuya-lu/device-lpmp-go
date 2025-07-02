@@ -48,9 +48,9 @@ func StartParser(frameCh <-chan []byte) {
 			packetType := head & 0x07    // 报文类型
 			body := make([]byte, len(frame)-2-7)
 			copy(body, frame[7:len(frame)-2])
-			frame_ctl := Frame{
+			frame_ctl := config.Frame{
 				SensorID:   sensorID,
-				DataLen:    dataCount,
+				DataLen:    byte(dataCount),
 				FragInd:    fragInd,
 				PacketType: packetType,
 				Payload:    body,
@@ -60,7 +60,7 @@ func StartParser(frameCh <-chan []byte) {
 			if packetType != 0 && packetType != 2 {
 				//处理控制报文的响应
 				if packetType == 4 || packetType == 5 {
-					handle_frame_ctl(frame_ctl)
+					handleFrameCtl(frame_ctl)
 				}
 				continue
 			}

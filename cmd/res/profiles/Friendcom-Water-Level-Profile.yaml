@@ -60,6 +60,15 @@ deviceResources:
       units: ""            
       defaultValue: "0"     # 默认不触发
 
+  - name: "json"   # ——— 复位控制命令 ———
+    isHidden: false
+    description: "控制命令"
+    properties:
+      valueType: "Object"    # 用 1 字节来表示操作码
+      readWrite: "RW"        # 向设备下发复位指令
+      units: ""            
+      defaultValue: "0"     # 默认不触发
+
   - name: "reset-response"  # ——— 复位响应状态 ———
     isHidden: false
     description: "复位响应状态(0=失败,1=成功)"
