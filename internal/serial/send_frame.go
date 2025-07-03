@@ -2,6 +2,8 @@ package serial
 
 import (
 	"fmt"
+	"strings"
+
 	"io"
 
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
@@ -32,8 +34,22 @@ func StartWriteWorker(port io.ReadWriteCloser) {
 }
 
 // SendFrame 向全局通道投递数据，供写协程发送
-func SendFrame(frame []byte) {
-	config.WriteChan <- frame
+func SendFrame(dstAddr string, payload []byte) {
+	// 1. 逐字节格式化，去掉前导 0
+	var parts []string
+	for _, b := range payload {
+		parts = append(parts, fmt.Sprintf("%X", b)) // %X：大写，不足一位也不补零
+	}
+	hexStr := strings.Join(parts, "") // 合并成一个连续的串
+
+	// 2. 拼成 AT 命令
+	cmd := fmt.Sprintf("\rAT+DTXSTR=%s,%s\r\n", dstAddr, hexStr)
+
+	// 3. 调试输出
+	fmt.Printf(">> Sending AT command: %s", cmd)
+
+	// 4. 真实发送
+	config.WriteChan <- []byte(cmd)
 }
 
 // 初始化时使用示例：

@@ -20,11 +20,7 @@ const ctrlTypeTimeParam = 0x04
 //	timestamp       uint32 — 世纪秒（设置时有效；查询时请传 0）
 //
 // 返回：完整的二进制帧（已附加 CRC16），或错误。
-func BuildTimeParamFrame(
-	sensorID [6]byte,
-	requestSetFlag byte,
-	timestamp uint32,
-) ([]byte, error) {
+func BuildTimeParamFrame(sensorID [6]byte, requestSetFlag byte, timestamp uint32) ([]byte, error) {
 	if requestSetFlag != 0 && requestSetFlag != 1 {
 		return nil, fmt.Errorf("invalid requestSetFlag %d, must be 0 or 1", requestSetFlag)
 	}

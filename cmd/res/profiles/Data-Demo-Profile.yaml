@@ -1,0 +1,6 @@
+name: "Data-Demo-Profile"
+manufacturer: "HY"
+model: "test"
+labels:
+  - "data"
+description: "数据汇总"

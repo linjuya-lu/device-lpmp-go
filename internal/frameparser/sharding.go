@@ -186,7 +186,7 @@ func sendAck(sensorKey string, sseq uint8, ackOK bool, pseq uint8) {
 		Check:      CRC16(ackData),
 	}
 	data := ackFrame.Bytes()
-	serial.SendFrame(data)
+	serial.SendFrame("1111", data)
 }
 
 // isStart/PSEQ 首尾判断

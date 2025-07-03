@@ -24,7 +24,6 @@ deviceList:
       - interval: "30s"
         onChange: false
         sourceName: "state"
-
   - name: "Friendcom-Water-Level-Sensor"
     profileName: "Friendcom-Water-Level-Profile"
     description: "友讯达超声波水位传感器"
@@ -34,16 +33,12 @@ deviceList:
       custom:
         location: /dev/ttyUSB0
         baudRate: "115200"
-    autoEvents:
-      - interval: "30s"
-        onChange: false
-        sourceName: "water-level"
-      - interval: "30s"
-        onChange: false
-        sourceName: "voltage"
-      - interval: "30s"
-        onChange: false
-        sourceName: "battery-level"
-      - interval: "30s"
-        onChange: false
-        sourceName: "state"
+  - name: "Command-Demo"
+    profileName: "Command-Demo-Profile"
+    description: "控制命令汇总"
+    labels:
+      - test
+    protocols:
+      custom:
+        location: /dev/ttyUSB0
+        baudRate: "115200"

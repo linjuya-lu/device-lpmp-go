@@ -9,7 +9,6 @@ package driver
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -130,17 +129,32 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 		return fmt.Errorf("请求数与参数数不匹配")
 	}
 
-	// 遍历每个请求，取出对应的值并写入 config
 	for i, req := range reqs {
 		resName := req.DeviceResourceName
 		cv := params[i]
 
-		// 直接使用 CommandValue.Value（已经是合适的 Go 类型）
-		value := cv.Value
+		// 先拿强类型值
+		v, _ := cv.Int8Value()
+		d.lc.Infof("Int8Value = %d", v)
+		// 如果是时间参数查询且值为 1
+		if resName == "Time_Parameter_Query" && v == 1 {
+			if err := d.handleTimeParameterQuery(deviceName); err != nil {
+				return err
+			}
+		}
+		// 如果是时间参数设置且值为 1
+		if resName == "Time_Parameter_Set" && v == 1 {
+			if err := d.handleTimeParameterSet(deviceName); err != nil {
+				return err
+			}
+		}
+		// 如果是复位命令且值为 1
+		if resName == "Reset_Set" && v == 1 {
+			if err := d.handleResetCommand(deviceName); err != nil {
+				return err
+			}
+		}
 
-		// 并发安全地写入运行时值表
-		config.SetDeviceValue(deviceName, resName, value)
-		d.lc.Infof("写入值: %s.%s = %v", deviceName, resName, value)
 	}
 
 	return nil
@@ -152,26 +166,68 @@ func (d *LpMpDriver) Stop(force bool) error {
 	return nil
 }
 
+// AddDevice 在设备被添加到 Core Metadata 时调用，
+// 从 Metadata 中加载 Device 和对应的 DeviceProfile，
+// 并针对每个 DeviceResource 调用 CopyDeviceValues 进行初始化。
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	d.lc.Debugf("a new Device is added: %s", deviceName)
-	if err := config.CopyDeviceValues(deviceName, deviceName); err != nil {
-		log.Fatalf("复制设备值失败：%v", err)
+	d.lc.Debugf("新设备已添加: %s", deviceName)
+
+	// 1. 从缓存中获取 Device 对象
+	dev, err := d.sdk.GetDeviceByName(deviceName)
+	if err != nil {
+		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
 	}
-	d.lc.Info("已将设备 %s 的所有资源值复制到 %s", deviceName, deviceName)
+
+	// 2. 从 Device 中取出 Profile 名称
+	profileName := dev.ProfileName
+
+	// 3. 获取对应的 DeviceProfile
+	prof, err := d.sdk.GetProfileByName(profileName)
+	if err != nil {
+		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
+	}
+
+	// 4. 针对每个资源执行初始化，传递默认值和类型
+	for _, dr := range prof.DeviceResources {
+		resName := dr.Name
+		defaultValue := dr.Properties.DefaultValue
+		valueType := dr.Properties.ValueType
+		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
+			return fmt.Errorf("初始化设备 %s 资源 %s 失败：%v", deviceName, resName, err)
+		}
+		d.lc.Infof("已将设备 %s 的资源 %s 初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+	}
+
 	return nil
 }
 
 func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("Device %s is updated", deviceName)
 
-	// 1. 清空旧的运行时值表
-	// config.DeleteDeviceValues(deviceName)
+	// 1. 从缓存中获取 Device 对象
+	dev, err := d.sdk.GetDeviceByName(deviceName)
+	if err != nil {
+		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
+	}
 
-	// 2. 从“模板”或默认条目中浅拷贝新值到 deviceName
-	//    假设你维护了一个名为 "deviceDefault" 的模板设备
-	if err := config.CopyDeviceValues("deviceDefault", deviceName); err != nil {
-		d.lc.Errorf("更新设备 %s 值失败: %v", deviceName, err)
-		return err
+	// 2. 从 Device 中取出 Profile 名称
+	profileName := dev.ProfileName
+
+	// 3. 获取对应的 DeviceProfile
+	prof, err := d.sdk.GetProfileByName(profileName)
+	if err != nil {
+		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
+	}
+
+	// 4. 针对每个资源重新初始化，传递默认值和类型
+	for _, dr := range prof.DeviceResources {
+		resName := dr.Name
+		defaultValue := dr.Properties.DefaultValue
+		valueType := dr.Properties.ValueType
+		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
+			return fmt.Errorf("更新设备 %s 资源 %s 失败：%v", deviceName, resName, err)
+		}
+		d.lc.Infof("已将设备 %s 的资源 %s 重新初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 	}
 
 	d.lc.Infof("已刷新设备 %s 的资源值为最新默认配置", deviceName)
@@ -181,21 +237,26 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	d.lc.Debugf("Device %s is removed", deviceName)
 
-	// // 1. 删除运行时值表
-	// config.DeleteDeviceValues(deviceName)
+	// 1. 删除运行时值表
+	if err := config.DeleteDeviceValues(deviceName); err != nil {
+		d.lc.Errorf("删除设备 %s 的运行时值失败: %v", deviceName, err)
+		return fmt.Errorf("删除设备 %s 的运行时值失败: %w", deviceName, err)
+	}
 
-	// // 2. 删除 sensorID 到 deviceName 的所有映射
-	// config.DeleteSensorIDMappingsByDevice(deviceName)
+	// 2. 删除 sensorID 到 deviceName 的所有映射
+	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {
+		d.lc.Errorf("删除设备 %s 的传感器映射失败: %v", deviceName, err)
+		return fmt.Errorf("删除设备 %s 的传感器映射失败: %w", deviceName, err)
+	}
 
 	d.lc.Infof("已移除设备 %s 的所有运行时数据和映射", deviceName)
 	return nil
 }
 
-func (d *LpMpDriver) Discover() error {
-	return fmt.Errorf("driver's Discover function isn't implemented")
-}
-
 func (d *LpMpDriver) ValidateDevice(device models.Device) error {
 	d.lc.Debug("Driver's ValidateDevice function isn't implemented")
 	return nil
+}
+func (d *LpMpDriver) Discover() error {
+	return fmt.Errorf("driver's Discover function isn't implemented")
 }

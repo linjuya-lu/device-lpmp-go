@@ -137,6 +137,23 @@ func SetDeviceValue(deviceName, resourceName string, value interface{}) {
 	valuesMap[deviceName][resourceName] = value
 }
 
+// GetDeviceValue 并发安全地获取指定设备的单个资源值
+// 返回值: interface{}, bool(是否存在)
+func GetDeviceValue(deviceName, resourceName string) (interface{}, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	// 1. 检查设备是否存在
+	deviceValues, ok := valuesMap[deviceName]
+	if !ok {
+		return nil, false
+	}
+
+	// 2. 检查资源是否存在并返回值
+	value, exists := deviceValues[resourceName]
+	return value, exists
+}
+
 // GetDeviceValues 并发安全地获取指定设备的所有运行时资源值
 // 返回值: map[resourceName]value, bool(是否存在)
 func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
@@ -154,24 +171,52 @@ func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
 	return copyMap, true
 }
 
-// CopyDeviceValues 复制 valuesMap 中 srcDevice 的所有资源值到 dstDevice
-func CopyDeviceValues(srcDevice, dstDevice string) error {
-	mu.Lock() // 如果你在并发场景下要保护全局 map
+// DeviceInit 初始化设备资源并设置正确类型的默认值
+func DeviceInit(deviceName, resourceName, defaultValue, valueType string) error {
+	mu.Lock()
 	defer mu.Unlock()
 
-	// 1. 检查源设备是否存在
-	srcMap, ok := valuesMap[srcDevice]
-	if !ok {
-		return fmt.Errorf("源设备 %s 不存在", srcDevice)
+	// 1. 确保设备在 valuesMap 中有对应的映射
+	if _, exists := valuesMap[deviceName]; !exists {
+		valuesMap[deviceName] = make(map[string]interface{})
 	}
 
-	// 2. 创建并填充新的内层 map（浅拷贝）
-	newMap := make(map[string]interface{}, len(srcMap))
-	for resource, val := range srcMap {
-		newMap[resource] = val
+	// 2. 使用现有的解析函数转换默认值
+	parsedValue := parseDefaultValue(defaultValue, valueType)
+	valuesMap[deviceName][resourceName] = parsedValue
+
+	return nil
+}
+
+// DeleteDeviceValues 删除指定设备的所有运行时值
+func DeleteDeviceValues(deviceName string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 检查设备是否存在
+	if _, exists := valuesMap[deviceName]; !exists {
+		return fmt.Errorf("设备 %s 不存在于运行时值表中", deviceName)
 	}
 
-	// 3. 把新 map 挂到 dstDevice
-	valuesMap[dstDevice] = newMap
+	// 删除设备的所有运行时值
+	delete(valuesMap, deviceName)
+	return nil
+}
+
+// DeleteSensorIDMappingsByDevice 删除指定设备的所有传感器ID映射
+func DeleteSensorIDMappingsByDevice(deviceName string) error {
+	// 遍历 sensorIDToDeviceName 映射，删除所有指向该设备的条目
+	toDelete := make([]string, 0)
+	for sensorID, mappedDeviceName := range sensorIDToDeviceName {
+		if mappedDeviceName == deviceName {
+			toDelete = append(toDelete, sensorID)
+		}
+	}
+
+	// 删除找到的映射
+	for _, sensorID := range toDelete {
+		delete(sensorIDToDeviceName, sensorID)
+	}
+
 	return nil
 }
