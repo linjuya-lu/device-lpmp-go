@@ -47,32 +47,28 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *LpMpDriver) Start() error {
-	// —— 0. 配置文件和串口参数（可以硬编码，也可从 d.config 读取）
-	const (
-		devicesYAML = "../cmd/res/devices/devices.yaml"
-		profilesDir = "../cmd/res/profiles"
-	)
+	// 配置文件和串口参数
+	devicesYAML := "../cmd/res/devices/devices.yaml"
+	profilesDir := "../cmd/res/profiles"
 	portName := "/dev/ttyUSB0"
 	baudRate := 115200
 
-	// —— 1. 初始化静态资源定义 + 默认初始值
+	// 初始化静态资源定义 + 默认初始值
 	if err := config.InitDeviceResources(devicesYAML, profilesDir); err != nil {
 		return fmt.Errorf("初始化设备资源失败: %w", err)
 	}
-
-	// —— 2. 打开串口
+	// 串口
 	serialPort, err := serial.Open(portName, baudRate)
 	if err != nil {
 		return fmt.Errorf("打开串口 %s 失败: %w", portName, err)
 	}
-
-	// —— 3. 启动 AT+DRX 监听，把解析到的二进制帧推到 frameCh
+	// AT+DRX 监听，二进制帧推到 frameCh
 	frameCh := make(chan []byte, 100)
 	serial.StartDRXListener(serialPort, frameCh)
 
-	// —— 4. 解析协程
+	// 解析协程
 	frameparser.StartParser(frameCh)
-	//打开写协程
+	//写协程
 	serial.StartWriteWorker(serialPort)
 
 	d.lc.Infof("串口监听和解析已启动")
@@ -154,7 +150,34 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 				return err
 			}
 		}
-
+		// 如果是ID查询命令且值为 1
+		if resName == "ID_Query" && v == 1 {
+			if err := d.handleIdQuery(deviceName); err != nil {
+				return err
+			}
+		}
+		// 如果是所有通用参数查询命令且值为 1
+		if resName == "General_Parameter_Query" && v == 1 {
+			if err := d.handleGeneParaQuery(deviceName); err != nil {
+				return err
+			}
+		}
+		// 如果是所有告警数据查询命令且值为 1
+		if resName == "Alarm_Parameter_Query" && v == 1 {
+			if err := d.handleIdAlarmParaQuery(deviceName); err != nil {
+				return err
+			}
+		}
+		// 如果是所有检测参数查询命令且值为 1
+		if resName == "Monitoring_Data_Query" && v == 1 {
+			if err := d.handleIdMoniDataQuery(deviceName); err != nil {
+				return err
+			}
+		}
+		// 如果是网络拓扑查询命令且值为 1
+		if resName == "Router_Parameter_Query" && v == 1 {
+			serial.SendTopoQuery(0, 10)
+		}
 	}
 
 	return nil

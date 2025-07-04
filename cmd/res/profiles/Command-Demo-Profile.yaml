@@ -7,7 +7,7 @@ description: "控制命令汇总"
 
 deviceResources:
   - name: "General_Parameter_Query"   # 通用参数查询
-    isHidden: false
+    isHidden: true
     description: "0未开启 1查询全部通用参数"
     properties:
       valueType: "Int8"    
@@ -15,7 +15,7 @@ deviceResources:
       units: ""            
       defaultValue: "0"     
   - name: "General_Parameter_Set"   # 通用参数设置
-    isHidden: false
+    isHidden: true
     description: "0未开启 1设置全部参数"
     properties:
       valueType: "Int8"    
@@ -23,7 +23,7 @@ deviceResources:
       units: ""            
       defaultValue: "0"    
   - name: "Monitoring_Data_Query"  # 监测数据查询
-    isHidden: false
+    isHidden: true
     description: "0未开启 1查询全部监测数据"
     properties:
       valueType: "Int8"    
@@ -31,7 +31,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Monitoring_Data_Set"  # 监测数据设置
-    isHidden: false
+    isHidden: true
     description: "0未开启 1设置全部监测数据"
     properties:
       valueType: "Int8"    
@@ -39,7 +39,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Alarm_Parameter_Query"  # 告警参数查询
-    isHidden: false
+    isHidden: true
     description: "0未开启 1查询全部告警数据"
     properties:
       valueType: "Int8"    
@@ -47,7 +47,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Alarm_Parameter_Set"  # 告警参数设置
-    isHidden: false
+    isHidden: true
     description: "0未开启 1设置全部告警数据"
     properties:
       valueType: "Int8"    
@@ -55,7 +55,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Time_Parameter_Query"  # 时间参数查询
-    isHidden: false
+    isHidden: true
     description: "0未开启 1查询全部告警数据"
     properties:
       valueType: "Int8"    
@@ -63,7 +63,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Time_Parameter_Set"  # 时间参数设置
-    isHidden: false
+    isHidden: true
     description: "0未开启 1设置全部告警数据"
     properties:
       valueType: "Int8"    
@@ -71,7 +71,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "ID_Query"  # ID参数查询
-    isHidden: false
+    isHidden: true
     description: "0未开启 1查询ID"
     properties:
       valueType: "Int8"    
@@ -79,7 +79,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "ID_Set"  # ID参数设置
-    isHidden: false
+    isHidden: true
     description: "0未开启 1设置ID"
     properties:
       valueType: "Int8"    
@@ -87,7 +87,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Reset_Set"  # ID参数查询
-    isHidden: false
+    isHidden: true
     description: "0未开启 1查询ID"
     properties:
       valueType: "Int8"    
@@ -95,7 +95,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "Time_Calibration_Request"  # ID参数设置
-    isHidden: false
+    isHidden: true
     description: "0未开启 1设置ID"
     properties:
       valueType: "Int8"    
@@ -103,7 +103,7 @@ deviceResources:
       units: ""
       defaultValue: "0"    
   - name: "EID"                # 设备唯一标识
-    isHidden: false                    
+    isHidden: false                   
     description: ""
     properties:
       valueType: "String"            

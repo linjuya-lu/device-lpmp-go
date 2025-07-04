@@ -8,22 +8,6 @@ deviceList:
       custom:
         location: /dev/ttyUSB0
         baudRate: "115200"
-    autoEvents:
-      - interval: "30s"
-        onChange: false
-        sourceName: "temperature"
-      - interval: "30s"
-        onChange: false
-        sourceName: "humidity"
-      - interval: "30s"
-        onChange: false
-        sourceName: "voltage"
-      - interval: "30s"
-        onChange: false
-        sourceName: "battery-level"
-      - interval: "30s"
-        onChange: false
-        sourceName: "state"
   - name: "Friendcom-Water-Level-Sensor"
     profileName: "Friendcom-Water-Level-Profile"
     description: "友讯达超声波水位传感器"
@@ -38,6 +22,15 @@ deviceList:
     description: "控制命令汇总"
     labels:
       - test
+    protocols:
+      custom:
+        location: /dev/ttyUSB0
+        baudRate: "115200"
+  - name: "Edge-Node"
+    profileName: "Edge-Proxy-Profile"
+    description: "边缘接入节点"
+    labels:
+      - edge-node
     protocols:
       custom:
         location: /dev/ttyUSB0

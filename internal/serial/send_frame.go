@@ -2,9 +2,8 @@ package serial
 
 import (
 	"fmt"
-	"strings"
-
 	"io"
+	"strings"
 
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
@@ -35,10 +34,10 @@ func StartWriteWorker(port io.ReadWriteCloser) {
 
 // SendFrame 向全局通道投递数据，供写协程发送
 func SendFrame(dstAddr string, payload []byte) {
-	// 1. 逐字节格式化，去掉前导 0
+	// 1. 逐字节格式化
 	var parts []string
 	for _, b := range payload {
-		parts = append(parts, fmt.Sprintf("%X", b)) // %X：大写，不足一位也不补零
+		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
 	hexStr := strings.Join(parts, "") // 合并成一个连续的串
 
@@ -53,13 +52,9 @@ func SendFrame(dstAddr string, payload []byte) {
 }
 
 // 初始化时使用示例：
-
 //
 //     // 启动写协程
 //     StartWriteWorker(port)
-//
-//     // 发送帧示例
-//     SendFrame([]byte{0xAA, 0xBB, 0xCC})
 //
 //     // 关闭通道
 //     close(writeChan)

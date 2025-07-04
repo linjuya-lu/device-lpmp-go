@@ -1,9 +1,9 @@
-name: "Data-Demo-Profile"
+name: "Edge-Proxy-Profile"
 manufacturer: "HY"
 model: "test"
 labels:
-  - "data"
-description: "数据汇总"
+  - "edgex-proxy"
+description: "边缘代理节点"
 
 deviceResources:
   - name: "Router_Parameter_Query"   # 路由参数查询，查询所有拓扑信息
@@ -30,5 +30,11 @@ deviceResources:
       readWrite: "R"                 
       units: ""                      
       defaultValue: "238A08262319"    
-
+deviceCommands:
+  -
+    name: "Command_Router_Parameter_Query"
+    readWrite: "W"
+    isHidden: false
+    resourceOperations:
+      - { deviceResource: "Router_Parameter_Query", defaultValue: "0" }
 
