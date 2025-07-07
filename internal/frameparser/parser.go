@@ -3,10 +3,12 @@ package frameparser
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"log"
 	"strings"
 
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
+	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
 // StartParser 从 frameCh 通道中持续读取完整帧，启动一个后台协程进行业务数据解析。
@@ -29,10 +31,7 @@ func StartParser(frameCh <-chan []byte) {
 			// CRC 校验：最后 2 字节为 CRC-16
 			payload := frame[:len(frame)-2]
 			recvCRC := binary.BigEndian.Uint16(frame[len(frame)-2:])
-			if CRC16(payload) != recvCRC {
-				log.Println("CRC 校验失败，跳过解析")
-				continue
-			}
+
 			// 1. 读取6字节SensorID，使用Hex字符串表示
 			sidBytes := frame[0:6]
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
@@ -48,6 +47,23 @@ func StartParser(frameCh <-chan []byte) {
 			packetType := head & 0x07    // 报文类型
 			body := make([]byte, len(frame)-2-7)
 			copy(body, frame[7:len(frame)-2])
+			if CRC16(payload) != recvCRC {
+				if fragInd == 0 {
+					switch packetType {
+					case 0:
+						SendDataStatus(sensorID, 0b001, 0x00, byte(dataCount))
+						// 监测报文
+					case 2:
+						SendDataStatus(sensorID, 0b011, 0x00, byte(dataCount))
+						// 告警报文
+					default:
+						continue
+					}
+				}
+				log.Println("CRC 校验失败，跳过解析")
+				continue
+			}
+
 			frame_ctl := config.Frame{
 				SensorID:   sensorID,
 				DataLen:    byte(dataCount),
@@ -56,19 +72,25 @@ func StartParser(frameCh <-chan []byte) {
 				Payload:    body,
 				Check:      recvCRC,
 			}
-			// 处理业务数据报文（监测=0、告警=2）
-			if packetType != 0 && packetType != 2 {
-				//处理控制报文的响应
-				if packetType == 4 || packetType == 5 {
+			if fragInd == 0 {
+				// 非分片帧：只处理业务或控制报文
+				switch packetType {
+				case 0:
+					SendDataStatus(sensorID, 0b001, 0xFF, byte(dataCount))
+					// 监测报文
+				case 2:
+					SendDataStatus(sensorID, 0b011, 0xFF, byte(dataCount))
+					// 告警报文
+				case 4, 5:
+					// 控制报文响应
 					handleFrameCtl(frame_ctl)
+				default:
+					// 其他 packetType 的非分片帧，不处理
+					continue
 				}
-				continue
-			}
-
-			// 分片帧不拼接，仅打印提示并跳过
-			if fragInd == 1 {
-				log.Printf("检测到分片帧 SensorID=%s，暂不拼接，跳过解析", sensorID)
-				continue
+			} else {
+				// 分片帧
+				ProcessFrame(frame_ctl)
 			}
 
 			// 3. 从第7字节开始解析参数数据，末尾2字节为CRC
@@ -134,4 +156,43 @@ func StartParser(frameCh <-chan []byte) {
 			}
 		}
 	}()
+}
+
+// SendDataStatus 构造并发送“监测数据响应”报文
+// 协议格式: [SensorID(6)][Header(1)][Data_Status(1)][CRC16(2)]
+//   - SensorID: 6 字节原始 ID，传入时应该是 12 字符的十六进制字符串
+//   - Header:
+//     高4位：DataLen (参数个数)
+//     第3位：FragInd (0=未分片)
+//     低3位：PacketType (0b001=监测数据响应)
+//   - Data_Status: 上传状态 0xFF 成功，0x00 失败
+//   - CRC16: 对整帧前 8 字节 CRC16 校验，高低字节附加
+
+func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
+	// 1. 解码 SensorKey：将 12 字符十六进制字符串解析为 6 字节
+	keyBytes, err := hex.DecodeString(sensorKey)
+	if err != nil {
+		return errors.New("invalid sensorKey hex: " + err.Error())
+	}
+	if len(keyBytes) != 6 {
+		return errors.New("sensorKey hex must decode to 6 bytes")
+	}
+
+	// 2. 构造 Header (1 byte)
+	const fragInd = 0 // 未分片
+	header := (dataLen<<4)&0xF0 | (fragInd<<3)&0x08 | (packetType & 0x07)
+
+	// 3. 拼接帧：SensorID + Header + Data_Status
+	packet := make([]byte, 0, len(keyBytes)+1+1+2)
+	packet = append(packet, keyBytes...)
+	packet = append(packet, header)
+	packet = append(packet, dataStatus)
+
+	// 4. 计算并追加 CRC16
+	crc := CRC16(packet)
+	packet = append(packet, byte(crc>>8), byte(crc&0xFF))
+
+	// 5. 发送
+	serial.SendFrame(sensorKey, packet)
+	return nil
 }

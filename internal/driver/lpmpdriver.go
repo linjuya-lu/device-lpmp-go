@@ -70,7 +70,12 @@ func (d *LpMpDriver) Start() error {
 	frameparser.StartParser(frameCh)
 	//写协程
 	serial.StartWriteWorker(serialPort)
-
+	//分片解析协程
+	go func() {
+		if err := frameparser.ShardingParser(frameparser.SDUCh); err != nil {
+			d.lc.Error("ShardingParser 异常退出: %v", err)
+		}
+	}()
 	d.lc.Infof("串口监听和解析已启动")
 	return nil
 }

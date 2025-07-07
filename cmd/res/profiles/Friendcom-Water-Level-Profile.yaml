@@ -49,7 +49,7 @@ deviceResources:
       valueType: "String"            
       readWrite: "RW"                 
       units: ""                      
-      defaultValue: ""               
+      defaultValue: "238A08262314"               
 
   - name: "reset-command"   # ——— 复位控制命令 ———
     isHidden: false

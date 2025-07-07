@@ -24,7 +24,7 @@ type SDUCache struct {
 
 const (
 	// 分片最大重传次数，由传感器端根据ACK逻辑重试
-	maxRetransmits = 3
+	// maxRetransmits = 3
 	// 重组超时，超过此时间未完成拼接则丢弃并回ACK失败
 	reassembleTimeout = 20 * time.Second
 )
@@ -186,7 +186,7 @@ func sendAck(sensorKey string, sseq uint8, ackOK bool, pseq uint8) {
 		Check:      CRC16(ackData),
 	}
 	data := ackFrame.Bytes()
-	serial.SendFrame("1111", data)
+	serial.SendFrame(sensorKey, data)
 }
 
 // isStart/PSEQ 首尾判断

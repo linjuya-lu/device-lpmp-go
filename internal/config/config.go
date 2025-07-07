@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,8 +74,19 @@ func parseDefaultValue(valStr, vt string) interface{} {
 		if b, err := strconv.ParseBool(valStr); err == nil {
 			return b
 		}
+	case "Float32Array":
+		var arr []float32
+		if err := json.Unmarshal([]byte(valStr), &arr); err == nil {
+			return arr
+		}
+	case "Object":
+		// 把像 "{}" 或者 "{\"key\":123}" 这样的 JSON 字符串解析成 map[string]interface{}
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(valStr), &obj); err == nil {
+			return obj
+		}
 	}
-	// 其它类型保留字符串
+
 	return valStr
 }
 
@@ -207,7 +219,7 @@ func DeleteDeviceValues(deviceName string) error {
 func DeleteSensorIDMappingsByDevice(deviceName string) error {
 	// 遍历 sensorIDToDeviceName 映射，删除所有指向该设备的条目
 	toDelete := make([]string, 0)
-	for sensorID, mappedDeviceName := range sensorIDToDeviceName {
+	for sensorID, mappedDeviceName := range SensorIDToDeviceName {
 		if mappedDeviceName == deviceName {
 			toDelete = append(toDelete, sensorID)
 		}
@@ -215,7 +227,7 @@ func DeleteSensorIDMappingsByDevice(deviceName string) error {
 
 	// 删除找到的映射
 	for _, sensorID := range toDelete {
-		delete(sensorIDToDeviceName, sensorID)
+		delete(SensorIDToDeviceName, sensorID)
 	}
 
 	return nil

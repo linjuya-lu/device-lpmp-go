@@ -109,7 +109,7 @@ deviceResources:
       valueType: "String"            
       readWrite: "R"                 
       units: ""                      
-      defaultValue: "238A08262319"    
+      defaultValue: "238A08262317"    
 
 deviceCommands:
   -
