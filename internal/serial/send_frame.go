@@ -8,14 +8,20 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
 
-// WriteFrame 保持原样，不修改参数
 func WriteFrame(port io.ReadWriteCloser, frame []byte) error {
-	n, err := port.Write(frame)
+	// 1. 转成字符串
+	payload := string(frame)
+
+	// 2. 打印一下，方便调试
+	fmt.Printf(">> 发送字符串: %q\n", payload)
+
+	// 3. 真正发出去
+	n, err := port.Write([]byte(payload))
 	if err != nil {
 		return fmt.Errorf("写入串口失败：%w", err)
 	}
-	if n != len(frame) {
-		return fmt.Errorf("写入字节数不完整：%d/%d", n, len(frame))
+	if n != len(payload) {
+		return fmt.Errorf("写入字节数不完整：%d/%d", n, len(payload))
 	}
 	return nil
 }

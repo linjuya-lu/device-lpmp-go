@@ -5,11 +5,11 @@ Writable:
 Service:
   Host: localhost
   Port: 59908
-  StartupMsg: device virtual started
+  StartupMsg: device lpmp started
 
 MessageBus:
   Optional:
-    ClientId: device-virtual
+    ClientId: device-lpmp
 
 Device:
   # These have common values (currently), but must be here for service local env overrides to apply when customized

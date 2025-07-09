@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 
@@ -22,7 +23,8 @@ func Open(portName string, baudRate int) (io.ReadWriteCloser, error) {
 // 的串口输出，提取出 hexPayload 并将其解码为字节切片。
 // 例如："+DRX:238A08262319,3,111111" → []byte{0x11,0x11,0x11}
 func ParseDRXLine(line string) ([]byte, error) {
-	// 只处理以 +DRX: 开头的行
+
+	// 处理 +DRX:
 	if !strings.HasPrefix(line, "+DRX:") {
 		return nil, fmt.Errorf("不是 DRX 数据行：%s", line)
 	}
@@ -109,5 +111,107 @@ func StartDRXListener(port io.Reader, frameCh chan<- []byte) {
 			}
 			frameCh <- frame
 		}
+	}()
+}
+
+// // DRX 数据通道
+var drxChan = make(chan []byte, 100)
+
+// TOP 原始行通道（给你的 topology 收集器用）
+var TopoChan = make(chan string, 100)
+
+// func StartSerialScanner(port io.Reader) {
+// 	go func() {
+// 		scanner := bufio.NewScanner(port)
+// 		for scanner.Scan() {
+// 			line := strings.TrimSpace(scanner.Text())
+// 			// TopoChan <- line
+// 			switch {
+// 			case strings.HasPrefix(line, "+TOP:"):
+// 				fmt.Printf("%s", line)
+// 				// 丢给 topology 那边去处理多行粘包
+// 				TopoChan <- line
+
+// 			case strings.HasPrefix(line, "+DRX:"):
+// 				// 丢给 DRX 解析器
+// 				data, err := ParseDRXLine(line)
+// 				if err == nil {
+// 					drxChan <- data
+// 				}
+
+// 			default:
+// 				// 你还可以在这里把所有行推给 rawChan
+// 				// rawChan <- line
+// 				continue
+// 			}
+// 		}
+// 		// 退出的时候别忘了关通道
+// 		// close(drxChan)
+// 		// close(topoChan)
+// 	}()
+// }
+
+// StartSerialScanner 从 port 里读数据：
+// - 对于以 +DRX: 开头的行，按原逻辑交给 ParseDRXLine/drxChan。
+// - 对于 +TOP: … OK 这一整块，手动拼包后一次性推给 TopoChan。
+// 其他行忽略。
+func StartSerialScanner(port io.Reader) {
+	go func() {
+		reader := bufio.NewReader(port)
+		var (
+			collectingTopo bool
+			topoBuf        strings.Builder
+		)
+
+		for {
+			rawLine, err := reader.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("串口读取出错: %v", err)
+				}
+				break
+			}
+			line := strings.TrimSpace(rawLine)
+
+			// —— DRX 逻辑 ——
+			if strings.HasPrefix(line, "+DRX:") {
+				data, err := ParseDRXLine(line)
+				if err == nil {
+					drxChan <- data
+				}
+				// DRX 行即便也可能带 +TOP:，按你原始逻辑先处理 DRX
+				continue
+			}
+
+			// —— TOP 逻辑，手动拼包 ——
+			switch {
+			case strings.HasPrefix(line, "+TOP:"):
+				// 收到块头，开始收集
+				collectingTopo = true
+				topoBuf.Reset()
+				// 取 header 后面可能的第一段 payload
+				parts := strings.SplitN(line[len("+TOP:"):], ",", 3)
+				if len(parts) >= 3 {
+					topoBuf.WriteString(parts[2])
+				}
+
+			case collectingTopo && line == "OK":
+				// 收完尾部 OK，完成一块
+				block := "+TOP:" + topoBuf.String() + "OK"
+				TopoChan <- block
+				collectingTopo = false
+
+			case collectingTopo:
+				// 中间续行，拼接
+				payload := strings.TrimSuffix(line, ",")
+				topoBuf.WriteString("," + payload)
+
+			default:
+				// 既非 +DRX: 也非 TOP 块中的行，忽略
+			}
+		}
+
+		close(TopoChan)
+		close(drxChan)
 	}()
 }

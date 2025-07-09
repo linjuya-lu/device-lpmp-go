@@ -15,6 +15,7 @@ import (
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 	"github.com/linjuya-lu/device-lpmp-go/internal/frameparser"
@@ -64,7 +65,8 @@ func (d *LpMpDriver) Start() error {
 	}
 	// AT+DRX 监听，二进制帧推到 frameCh
 	frameCh := make(chan []byte, 100)
-	serial.StartDRXListener(serialPort, frameCh)
+	// serial.StartDRXListener(serialPort, frameCh)
+	serial.StartSerialScanner(serialPort)
 
 	// 解析协程
 	frameparser.StartParser(frameCh)
@@ -76,8 +78,17 @@ func (d *LpMpDriver) Start() error {
 			d.lc.Error("ShardingParser 异常退出: %v", err)
 		}
 	}()
+	//拓扑解析和定时清理协程
+	// topoListCh := make(chan []config.NodeTopology, 10)
+
+	// serial.StartTopoProcessor(serial.TopoChan, topoListCh)
+
+	// 启动 topology 处理器，不要赋值给任何变量
+	serial.StartTopoProcessor(serial.TopoChan)
+
 	d.lc.Infof("串口监听和解析已启动")
 	return nil
+
 }
 
 func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest) (res []*dsModels.CommandValue, err error) {
@@ -86,23 +97,37 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 
 	d.lc.Infof("HandleReadCommands 调用: 设备=%s, 请求资源数=%d", deviceName, len(reqs))
 
-	// 从 config 中取出当前所有资源的值快照
+	// 取快照
 	values, ok := config.GetDeviceValues(deviceName)
 	if !ok {
-		d.lc.Errorf("设备 %s 未找到或无可用值", deviceName)
 		return nil, fmt.Errorf("设备 %s 未找到或无可用值", deviceName)
 	}
 
-	results := make([]*dsModels.CommandValue, 0, len(reqs))
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
-		val, exists := values[resName]
-		if !exists {
-			d.lc.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
-			return nil, fmt.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
+
+		// 1) 如果是路由信息，直接从全局 topoList 取数据，并 JSON 序列化
+		if resName == "Routing_Information" {
+			topo := serial.GetTopoList() // []config.NodeTopology
+			fmt.Printf("topo:%s", topo)
+			// 序列化成 CommandValue
+			cv, cerr := dsModels.NewCommandValue(
+				resName,
+				common.ValueTypeObject, // 指定这是一个 Object 类型
+				topo,                   // 任何可以 json.Marshal 的 Go 值
+			)
+			if cerr != nil {
+				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
+			}
+			res = append(res, cv)
+			continue
 		}
 
-		// 构造 CommandValue
+		// 2) 其他资源按原逻辑从 config 缓存读取
+		val, exists := values[resName]
+		if !exists {
+			return nil, fmt.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
+		}
 		cv := &dsModels.CommandValue{
 			DeviceResourceName: resName,
 			Type:               req.Type,
@@ -110,11 +135,11 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			Origin:             time.Now().UnixNano(),
 			Tags:               map[string]string{},
 		}
-		results = append(results, cv)
 		d.lc.Infof("读取值: %s.%s = %v", deviceName, resName, val)
+		res = append(res, cv)
 	}
 
-	return results, nil
+	return res, nil
 }
 
 func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest,

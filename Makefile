@@ -5,13 +5,13 @@ ENABLE_FULL_RELRO=true
 # change the following boolean flag to enable or disable PIE for linux binaries which is needed for ASLR (Address Space Layout Randomization) on Linux, the ASLR support on Windows is enabled by default
 ENABLE_PIE=true
 
-MICROSERVICES=cmd/device-virtual
+MICROSERVICES=cmd/device-lpmp
 
 .PHONY: $(MICROSERVICES)
 
 ARCH=$(shell uname -m)
 
-DOCKERS=docker_device_virtual_go
+DOCKERS=docker_device_lpmp_go
 .PHONY: $(DOCKERS)
 
 VERSION=$(shell cat ./VERSION 2>/dev/null || echo 0.0.0)
@@ -42,7 +42,7 @@ build-noziti:
 tidy:
 	go mod tidy
 
-cmd/device-virtual:
+cmd/device-lpmp:
 	CGO_ENABLED=0 go build -tags "$(ADD_BUILD_TAGS)" $(GOFLAGS) -o $@ ./cmd
 
 
@@ -67,7 +67,7 @@ clean:
 
 docker: $(DOCKERS)
 
-docker_device_virtual_go:
+docker_device_lpmp_go:
 	docker build \
 		--build-arg ADD_BUILD_TAGS=$(ADD_BUILD_TAGS) \
 		--label "git_sha=$(GIT_SHA)" \
