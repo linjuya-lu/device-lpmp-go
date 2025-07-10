@@ -1,5 +1,3 @@
-// Package serial 提供对 AT+DRX 串口响应的解析功能，
-// 将 ASCII 格式的接收指令转为二进制帧。
 package serial
 
 import (
@@ -13,7 +11,7 @@ import (
 	goserial "go.bug.st/serial.v1"
 )
 
-// Open 打开一个串口，并以 io.ReadWriteCloser 的形式返回
+// 打开串口
 func Open(portName string, baudRate int) (io.ReadWriteCloser, error) {
 	mode := &goserial.Mode{BaudRate: baudRate}
 	return goserial.Open(portName, mode)
@@ -23,7 +21,6 @@ func Open(portName string, baudRate int) (io.ReadWriteCloser, error) {
 // 的串口输出，提取出 hexPayload 并将其解码为字节切片。
 // 例如："+DRX:238A08262319,3,111111" → []byte{0x11,0x11,0x11}
 func ParseDRXLine(line string) ([]byte, error) {
-
 	// 处理 +DRX:
 	if !strings.HasPrefix(line, "+DRX:") {
 		return nil, fmt.Errorf("不是 DRX 数据行：%s", line)
@@ -59,12 +56,12 @@ type DRXReader struct {
 	s *bufio.Scanner
 }
 
-// NewDRXReader 创建一个 DRXReader，对给定的 io.Reader 进行封装
+// 创建一个 DRXReader
 func NewDRXReader(r io.Reader) *DRXReader {
 	return &DRXReader{s: bufio.NewScanner(r)}
 }
 
-// ReadFrame 读取下一条 DRX 响应，返回解码后的字节切片
+// ReadFrame 读取 DRX 响应，返回解码后的字节切片
 func (r *DRXReader) ReadFrame() ([]byte, error) {
 	for r.s.Scan() {
 		line := r.s.Text()
@@ -86,16 +83,6 @@ func (r *DRXReader) ReadFrame() ([]byte, error) {
 
 // StartDRXListener 启动一个 goroutine，从 io.Reader 读取 AT+DRX 响应帧，
 // 并将解码后的二进制帧推送到 frameCh。
-// 调用示例（在初始化时）：
-//
-//	frameCh := make(chan []byte, 100)
-//	serial.StartDRXListener(port, frameCh)
-//
-// 后续可在其他协程中：
-//
-//	for frame := range frameCh {
-//	    // 处理 frame
-//	}
 func StartDRXListener(port io.Reader, frameCh chan<- []byte) {
 	go func() {
 		r := NewDRXReader(port)
@@ -114,10 +101,10 @@ func StartDRXListener(port io.Reader, frameCh chan<- []byte) {
 	}()
 }
 
-// // DRX 数据通道
+// DRX数据通道
 var drxChan = make(chan []byte, 100)
 
-// TOP 原始行通道（给你的 topology 收集器用）
+// TOP原始行通道（给topology收集器用）
 var TopoChan = make(chan string, 100)
 
 // func StartSerialScanner(port io.Reader) {
@@ -162,7 +149,6 @@ func StartSerialScanner(port io.Reader) {
 			collectingTopo bool
 			topoBuf        strings.Builder
 		)
-
 		for {
 			rawLine, err := reader.ReadString('\n')
 			if err != nil {
@@ -172,7 +158,6 @@ func StartSerialScanner(port io.Reader) {
 				break
 			}
 			line := strings.TrimSpace(rawLine)
-
 			// —— DRX 逻辑 ——
 			if strings.HasPrefix(line, "+DRX:") {
 				data, err := ParseDRXLine(line)
@@ -182,11 +167,10 @@ func StartSerialScanner(port io.Reader) {
 				// DRX 行即便也可能带 +TOP:，按你原始逻辑先处理 DRX
 				continue
 			}
-
-			// —— TOP 逻辑，手动拼包 ——
+			// —— TOP拼包 ——
 			switch {
 			case strings.HasPrefix(line, "+TOP:"):
-				// 收到块头，开始收集
+				// 收到块头
 				collectingTopo = true
 				topoBuf.Reset()
 				// 取 header 后面可能的第一段 payload
@@ -194,23 +178,19 @@ func StartSerialScanner(port io.Reader) {
 				if len(parts) >= 3 {
 					topoBuf.WriteString(parts[2])
 				}
-
 			case collectingTopo && line == "OK":
 				// 收完尾部 OK，完成一块
 				block := "+TOP:" + topoBuf.String() + "OK"
 				TopoChan <- block
 				collectingTopo = false
-
 			case collectingTopo:
 				// 中间续行，拼接
 				payload := strings.TrimSuffix(line, ",")
 				topoBuf.WriteString("," + payload)
-
 			default:
 				// 既非 +DRX: 也非 TOP 块中的行，忽略
 			}
 		}
-
 		close(TopoChan)
 		close(drxChan)
 	}()

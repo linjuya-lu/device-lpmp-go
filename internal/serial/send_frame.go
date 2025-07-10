@@ -9,13 +9,11 @@ import (
 )
 
 func WriteFrame(port io.ReadWriteCloser, frame []byte) error {
-	// 1. 转成字符串
+	// 转成字符串
 	payload := string(frame)
-
-	// 2. 打印一下，方便调试
+	// 调试
 	fmt.Printf(">> 发送字符串: %q\n", payload)
-
-	// 3. 真正发出去
+	// 发送
 	n, err := port.Write([]byte(payload))
 	if err != nil {
 		return fmt.Errorf("写入串口失败：%w", err)
@@ -31,7 +29,6 @@ func StartWriteWorker(port io.ReadWriteCloser) {
 	go func() {
 		for frame := range config.WriteChan {
 			if err := WriteFrame(port, frame); err != nil {
-				// 处理写错误，例如记录日志或重试
 				fmt.Println("写入错误：", err)
 			}
 		}
@@ -40,20 +37,17 @@ func StartWriteWorker(port io.ReadWriteCloser) {
 
 // SendFrame 向全局通道投递数据，供写协程发送
 func SendFrame(dstAddr string, payload []byte) {
-	// 1. 逐字节格式化
+	// 逐字节格式化
 	var parts []string
 	for _, b := range payload {
 		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
-	hexStr := strings.Join(parts, "") // 合并成一个连续的串
-
-	// 2. 拼成 AT 命令
+	hexStr := strings.Join(parts, "") // 合并字符串
+	// 拼成 AT 命令
 	cmd := fmt.Sprintf("\rAT+DTXSTR=%s,%s\r\n", dstAddr, hexStr)
-
-	// 3. 调试输出
+	// 调试
 	fmt.Printf(">> Sending AT command: %s", cmd)
-
-	// 4. 真实发送
+	// 发送
 	config.WriteChan <- []byte(cmd)
 }
 

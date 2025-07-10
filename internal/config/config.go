@@ -86,7 +86,6 @@ func parseDefaultValue(valStr, vt string) interface{} {
 			return obj
 		}
 	}
-
 	return valStr
 }
 
@@ -105,7 +104,6 @@ func InitDeviceResources(devicesPath, profilesDir string) error {
 	if err := yaml.Unmarshal(raw, &devs); err != nil {
 		return fmt.Errorf("解析 devices.yaml 失败：%w", err)
 	}
-
 	mu.Lock()
 	defer mu.Unlock()
 	// 加载并写入静态资源和默认值表
@@ -154,14 +152,12 @@ func SetDeviceValue(deviceName, resourceName string, value interface{}) {
 func GetDeviceValue(deviceName, resourceName string) (interface{}, bool) {
 	mu.RLock()
 	defer mu.RUnlock()
-
-	// 1. 检查设备是否存在
+	//  检查设备是否存在
 	deviceValues, ok := valuesMap[deviceName]
 	if !ok {
 		return nil, false
 	}
-
-	// 2. 检查资源是否存在并返回值
+	// 检查资源是否存在并返回值
 	value, exists := deviceValues[resourceName]
 	return value, exists
 }
@@ -187,16 +183,13 @@ func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
 func DeviceInit(deviceName, resourceName, defaultValue, valueType string) error {
 	mu.Lock()
 	defer mu.Unlock()
-
-	// 1. 确保设备在 valuesMap 中有对应的映射
+	// 确保设备在 valuesMap 中有对应的映射
 	if _, exists := valuesMap[deviceName]; !exists {
 		valuesMap[deviceName] = make(map[string]interface{})
 	}
-
-	// 2. 使用现有的解析函数转换默认值
+	// 使用现有的解析函数转换默认值
 	parsedValue := parseDefaultValue(defaultValue, valueType)
 	valuesMap[deviceName][resourceName] = parsedValue
-
 	return nil
 }
 
@@ -204,12 +197,10 @@ func DeviceInit(deviceName, resourceName, defaultValue, valueType string) error 
 func DeleteDeviceValues(deviceName string) error {
 	mu.Lock()
 	defer mu.Unlock()
-
 	// 检查设备是否存在
 	if _, exists := valuesMap[deviceName]; !exists {
 		return fmt.Errorf("设备 %s 不存在于运行时值表中", deviceName)
 	}
-
 	// 删除设备的所有运行时值
 	delete(valuesMap, deviceName)
 	return nil
@@ -224,11 +215,9 @@ func DeleteSensorIDMappingsByDevice(deviceName string) error {
 			toDelete = append(toDelete, sensorID)
 		}
 	}
-
 	// 删除找到的映射
 	for _, sensorID := range toDelete {
 		delete(SensorIDToDeviceName, sensorID)
 	}
-
 	return nil
 }

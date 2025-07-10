@@ -17,8 +17,7 @@ import (
 // 4. 通过串口层发送 AT+DTXSTR 命令
 func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -31,8 +30,7 @@ func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -46,11 +44,10 @@ func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建复位帧
+	// 构建复位帧
 	ts := uint32(time.Date(2025, 6, 25, 12, 0, 0, 0, time.UTC).Unix())
 	reqFrame, _ := frameparser.BuildTimeParamFrame(sensorID, 1, ts)
-	// 4. 发送命令
+	// 发送命令
 	serial.SendFrame(eidStr, reqFrame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -58,8 +55,7 @@ func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 
 func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -72,8 +68,7 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -87,11 +82,9 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建复位帧
+	// 构建复位帧
 	reqFrame, _ := frameparser.BuildResetRequest(sensorID)
-
-	// 4. 发送命令
+	// 发送命令
 	serial.SendFrame(eidStr, reqFrame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -99,8 +92,7 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 
 func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -113,8 +105,7 @@ func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -128,11 +119,9 @@ func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建复位帧
+	// 构建复位帧
 	reqFrame, _ := frameparser.BuildTimeParamFrame(sensorID, 0, 0)
-
-	// 4. 发送命令
+	// 发送命令
 	serial.SendFrame(eidStr, reqFrame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -140,8 +129,7 @@ func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
 
 func (d *LpMpDriver) handleIdQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -154,8 +142,7 @@ func (d *LpMpDriver) handleIdQuery(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -169,14 +156,12 @@ func (d *LpMpDriver) handleIdQuery(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建ID查询帧
+	//构建ID查询帧
 	frame, err := frameparser.BuildSensorIDFrame(sensorID, 0, [6]byte{})
 	if err != nil {
 		return fmt.Errorf("构造传感器ID查询帧失败: %w", err)
 	}
-
-	// 4. 发送命令
+	//发送命令
 	serial.SendFrame(eidStr, frame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -184,8 +169,7 @@ func (d *LpMpDriver) handleIdQuery(deviceName string) error {
 
 func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -198,8 +182,7 @@ func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -213,14 +196,12 @@ func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建ID查询帧
+	//构建ID查询帧
 	frame, err := frameparser.BuildMonitoringDataQueryFrame(sensorID)
 	if err != nil {
 		return fmt.Errorf("构造全部通用参数查询失败: %w", err)
 	}
-
-	// 4. 发送命令
+	//发送命令
 	serial.SendFrame(eidStr, frame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -228,8 +209,7 @@ func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 
 func (d *LpMpDriver) handleIdAlarmParaQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -242,8 +222,7 @@ func (d *LpMpDriver) handleIdAlarmParaQuery(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	//解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -257,14 +236,12 @@ func (d *LpMpDriver) handleIdAlarmParaQuery(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建ID查询帧
+	// 构建ID查询帧
 	frame, err := frameparser.BuildAlarmParameterQueryFrame(sensorID)
 	if err != nil {
 		return fmt.Errorf("构造q全部通用参数查询失败: %w", err)
 	}
-
-	// 4. 发送命令
+	// 发送命令
 	serial.SendFrame(eidStr, frame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -272,8 +249,7 @@ func (d *LpMpDriver) handleIdAlarmParaQuery(deviceName string) error {
 
 func (d *LpMpDriver) handleGeneParaQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
-
-	// 1. 获取设备的 EID 字符串
+	// 获取设备的 EID 字符串
 	eidValue, ok := config.GetDeviceValue(deviceName, "EID")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -286,8 +262,7 @@ func (d *LpMpDriver) handleGeneParaQuery(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-
-	// 2. 解码成 6 字节
+	//解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
@@ -301,14 +276,12 @@ func (d *LpMpDriver) handleGeneParaQuery(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-
-	// 3. 构建ID查询帧
+	//构建ID查询帧
 	frame, err := frameparser.BuildParameterQueryFrame(sensorID)
 	if err != nil {
 		return fmt.Errorf("构造q全部通用参数查询失败: %w", err)
 	}
-
-	// 4. 发送命令
+	//发送命令
 	serial.SendFrame(eidStr, frame)
 	d.lc.Infof("已发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil

@@ -15,37 +15,29 @@ const ctrlTypeSensorID = 0x05 // 假设值为 7，如有具体值请替换
 // requestSetFlag: 0=查询；1=设置。
 // newID: 当 requestSetFlag=1 时，填入新的 6 字节 ID；否则可传空零值 [6]byte{}。
 func BuildSensorIDFrame(sensorID [6]byte, requestSetFlag byte, newID [6]byte) ([]byte, error) {
-	// 1. 校验标志位
+	// 校验标志位
 	if requestSetFlag != 0 && requestSetFlag != 1 {
 		return nil, fmt.Errorf("invalid requestSetFlag %d, must be 0 or 1", requestSetFlag)
 	}
-
-	// 2. 头部缓存：6B SensorID + 1B head + 1B CtrlType+Flag
+	// 头部缓存：6B SensorID + 1B head + 1B CtrlType+Flag
 	buf := make([]byte, 0, 6+1+1+6+2)
-
-	// 2.1 SensorID
+	// SensorID
 	buf = append(buf, sensorID[:]...)
-
-	// 2.2 head = DataLen(4b=0) | FragInd(1b=0)<<3 | PacketType(3b)
+	// head = DataLen(4b=0) | FragInd(1b=0)<<3 | PacketType(3b)
 	head := byte(0<<4) | byte(0<<3) | byte(packetTypeControl&0x07)
 	buf = append(buf, head)
-
-	// 2.3 Control 字段 = CtrlType(7b)<<1 | RequestSetFlag(1b)
+	// Control 字段 = CtrlType(7b)<<1 | RequestSetFlag(1b)
 	ctrlByte := byte((ctrlTypeSensorID & 0x7F) << 1)
 	if requestSetFlag == 1 {
 		ctrlByte |= 0x01
 	}
 	buf = append(buf, ctrlByte)
-
-	// 3. 报文内容：NewSensorID (6 字节)
-	//    查询时通常全 0；设置时填实际 newID
+	// 报文内容：NewSensorID (6 字节)
 	buf = append(buf, newID[:]...)
-
-	// 4. 校验位：CRC16 前面所有字节，大端序追加 2 字节
+	// 校验位：CRC16 前面所有字节，大端序追加 2 字节
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)
-
 	return buf, nil
 }

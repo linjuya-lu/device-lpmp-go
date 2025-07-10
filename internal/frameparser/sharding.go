@@ -1,6 +1,6 @@
-// 实现第8章和附录H分片解析、确认及重传机制
 package frameparser
 
+// 实现第8章和附录H分片解析、确认及重传机制
 import (
 	"encoding/binary"
 	"fmt"
@@ -31,7 +31,7 @@ const (
 
 var (
 	cacheMu sync.Mutex
-	// 使用 string 作为键，因为 frame.SensorID 为 string
+	// 使用 string 作为键，即 frame.SensorID
 	sduCaches = make(map[string]*SDUCache)
 	// 重组后的完整 SDU 交给此通道
 	SDUCh = make(chan config.Frame, 100)
@@ -40,12 +40,10 @@ var (
 // ProcessFrame 处理从上层收到的 config.Frame
 // 包括提取分片头、缓存重组、ACK应答、超时丢弃
 func ProcessFrame(frame config.Frame) {
-
 	i := 0
 	two := binary.BigEndian.Uint16(frame.Payload[i : i+2])
 	i += 2
 	SSEQ := uint8(two >> 10) // 6bit
-
 	sensorKey := frame.SensorID
 	// 如果未分片，直接应答ACK并输出
 	if frame.FragInd == 0 {
@@ -53,7 +51,6 @@ func ProcessFrame(frame config.Frame) {
 		SDUCh <- frame
 		return
 	}
-
 	// 解析PDU头，需至少4字节
 	if len(frame.Payload) < 4 {
 		fmt.Printf("PDU头太短: %d字节\n", len(frame.Payload))
@@ -61,7 +58,6 @@ func ProcessFrame(frame config.Frame) {
 		return
 	}
 	// 游标
-
 	PSEQ := uint8((two >> 1) & 0x7F) // 7bit
 	i += 2                           // Size 字段占2字节前移过度?
 	size := binary.LittleEndian.Uint16(frame.Payload[i-2 : i])
@@ -71,10 +67,8 @@ func ProcessFrame(frame config.Frame) {
 		return
 	}
 	data := frame.Payload[i : i+int(size)]
-
 	cacheMu.Lock()
 	cache, exists := sduCaches[sensorKey]
-
 	// 首片
 	if !exists {
 		if isStart(PSEQ) {
@@ -101,7 +95,6 @@ func ProcessFrame(frame config.Frame) {
 		cacheMu.Unlock()
 		return
 	}
-
 	// 不同SSEQ的新首片，重启
 	if cache.SSEQ != SSEQ {
 		if isStart(PSEQ) {
@@ -115,7 +108,6 @@ func ProcessFrame(frame config.Frame) {
 		cacheMu.Unlock()
 		return
 	}
-
 	// 同一SSEQ的分片处理
 	switch {
 	case PSEQ < cache.expected:
@@ -160,7 +152,6 @@ func finalize(sensorKey string, frame config.Frame) {
 	cache.timer.Stop()
 	delete(sduCaches, sensorKey)
 	copy(frame.Payload, cache.buffer)
-
 	SDUCh <- frame
 }
 
@@ -207,7 +198,6 @@ func ShardingParser(frameCh <-chan config.Frame) error {
 			idx += 2
 			paramType := head16 >> 2       // 14bit类型码
 			lenFlag := uint8(head16 & 0x3) // 2bit长度指示
-
 			// 计算真实数据长度
 			var dataLen uint32
 			switch lenFlag {
@@ -223,17 +213,14 @@ func ShardingParser(frameCh <-chan config.Frame) error {
 				dataLen = uint32(frame.Payload[idx])<<16 | uint32(frame.Payload[idx+1])<<8 | uint32(frame.Payload[idx+2])
 				idx += 3
 			}
-
 			// 数据越界校验
 			if idx+int(dataLen) > len(frame.Payload)-2 {
 				log.Printf("参数数据越界 SensorID=%s，跳过本帧", frame.SensorID)
 				break
 			}
-
 			// 提取原始值字节
 			valBytes := frame.Payload[idx : idx+int(dataLen)]
 			idx += int(dataLen)
-
 			deviceName, hasDevice := config.LookupDeviceName(frame.SensorID)
 			if !hasDevice {
 				log.Printf("未知 SensorID=%s，跳过本帧", frame.SensorID)
@@ -255,7 +242,6 @@ func ShardingParser(frameCh <-chan config.Frame) error {
 
 			parsed++
 		}
-
 	}
 	return nil
 }

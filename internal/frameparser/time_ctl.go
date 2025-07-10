@@ -24,33 +24,26 @@ func BuildTimeParamFrame(sensorID [6]byte, requestSetFlag byte, timestamp uint32
 	if requestSetFlag != 0 && requestSetFlag != 1 {
 		return nil, fmt.Errorf("invalid requestSetFlag %d, must be 0 or 1", requestSetFlag)
 	}
-
-	// 1. 先预分配：6B SensorID + 1B head + 1B ctrl + 4B ts + 2B CRC
+	// 预分配：6B SensorID + 1B head + 1B ctrl + 4B ts + 2B CRC
 	buf := make([]byte, 0, 6+1+1+4+2)
-
-	// 2. SensorID
+	// SensorID
 	buf = append(buf, sensorID[:]...)
-
-	// 3. head：DataLen(4b=0) | FragInd(1b=0)<<3 | PacketType(3b)
+	//head：DataLen(4b=0) | FragInd(1b=0)<<3 | PacketType(3b)
 	head := byte(0<<4) | byte(0<<3) | byte(packetTypeControl&0x07)
 	buf = append(buf, head)
-
-	// 4. CtrlType+RequestSetFlag：7b ctrlType<<1 | 1b flag
+	//CtrlType+RequestSetFlag：7b ctrlType<<1 | 1b flag
 	ctrlByte := byte((ctrlTypeTimeParam&0x7F)<<1) | (requestSetFlag & 0x01)
 	buf = append(buf, ctrlByte)
-
-	// 5. Timestamp(4字节)
-	//    查询时 timestamp=0；设置时请传入需要下发的世纪秒
+	// Timestamp(4字节)
+	// 查询时 timestamp=0；设置时请传入需要下发的世纪秒
 	tsBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(tsBytes, timestamp)
 	buf = append(buf, tsBytes...)
-
-	// 6. CRC16 校验位（大端序）
+	//CRC16 校验位（大端序）
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)
-
 	return buf, nil
 }
 

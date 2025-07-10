@@ -1,10 +1,3 @@
-// -*- Mode: Go; indent-tabs-mode: t -*-
-//
-// Copyright (C) 2019-2023 IOTech Ltd
-//
-// SPDX-License-Identifier: Apache-2.0
-
-// Package driver provides an implementation of a ProtocolDriver interface.
 package driver
 
 import (
@@ -54,20 +47,18 @@ func (d *LpMpDriver) Start() error {
 	portName := "/dev/ttyUSB0"
 	baudRate := 115200
 
-	// 初始化静态资源定义 + 默认初始值
+	// 初始化资源
 	if err := config.InitDeviceResources(devicesYAML, profilesDir); err != nil {
 		return fmt.Errorf("初始化设备资源失败: %w", err)
 	}
-	// 串口
+	// 串口初始
 	serialPort, err := serial.Open(portName, baudRate)
 	if err != nil {
 		return fmt.Errorf("打开串口 %s 失败: %w", portName, err)
 	}
 	// AT+DRX 监听，二进制帧推到 frameCh
 	frameCh := make(chan []byte, 100)
-	// serial.StartDRXListener(serialPort, frameCh)
 	serial.StartSerialScanner(serialPort)
-
 	// 解析协程
 	frameparser.StartParser(frameCh)
 	//写协程
@@ -78,34 +69,23 @@ func (d *LpMpDriver) Start() error {
 			d.lc.Error("ShardingParser 异常退出: %v", err)
 		}
 	}()
-	//拓扑解析和定时清理协程
-	// topoListCh := make(chan []config.NodeTopology, 10)
-
-	// serial.StartTopoProcessor(serial.TopoChan, topoListCh)
-
 	// 启动 topology 处理器，不要赋值给任何变量
 	serial.StartTopoProcessor(serial.TopoChan)
-
 	d.lc.Infof("串口监听和解析已启动")
 	return nil
-
 }
 
 func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest) (res []*dsModels.CommandValue, err error) {
 	d.locker.Lock()
 	defer d.locker.Unlock()
-
 	d.lc.Infof("HandleReadCommands 调用: 设备=%s, 请求资源数=%d", deviceName, len(reqs))
-
-	// 取快照
+	// 取缓存
 	values, ok := config.GetDeviceValues(deviceName)
 	if !ok {
 		return nil, fmt.Errorf("设备 %s 未找到或无可用值", deviceName)
 	}
-
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
-
 		// 1) 如果是路由信息，直接从全局 topoList 取数据，并 JSON 序列化
 		if resName == "Routing_Information" {
 			topo := serial.GetTopoList() // []config.NodeTopology
@@ -113,8 +93,8 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			// 序列化成 CommandValue
 			cv, cerr := dsModels.NewCommandValue(
 				resName,
-				common.ValueTypeObject, // 指定这是一个 Object 类型
-				topo,                   // 任何可以 json.Marshal 的 Go 值
+				common.ValueTypeObject, //  Object 类型
+				topo,
 			)
 			if cerr != nil {
 				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
@@ -122,8 +102,7 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			res = append(res, cv)
 			continue
 		}
-
-		// 2) 其他资源按原逻辑从 config 缓存读取
+		// 2) 静态资源从 config 缓存读取
 		val, exists := values[resName]
 		if !exists {
 			return nil, fmt.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
@@ -138,28 +117,23 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 		d.lc.Infof("读取值: %s.%s = %v", deviceName, resName, val)
 		res = append(res, cv)
 	}
-
 	return res, nil
 }
 
-func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest,
-	params []*dsModels.CommandValue) error {
+func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest, params []*dsModels.CommandValue) error {
 	d.locker.Lock()
 	defer d.locker.Unlock()
 
 	d.lc.Infof("HandleWriteCommands 调用: 设备=%s, 写入请求数=%d", deviceName, len(reqs))
-
 	// 请求数与参数数必须一致
 	if len(reqs) != len(params) {
 		d.lc.Errorf("请求数与参数数不匹配: %d vs %d", len(reqs), len(params))
 		return fmt.Errorf("请求数与参数数不匹配")
 	}
-
 	for i, req := range reqs {
 		resName := req.DeviceResourceName
 		cv := params[i]
-
-		// 先拿强类型值
+		// 命令类型转换
 		v, _ := cv.Int8Value()
 		d.lc.Infof("Int8Value = %d", v)
 		// 如果是时间参数查询且值为 1
@@ -209,13 +183,13 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 			serial.SendTopoQuery(0, 10)
 		}
 	}
-
 	return nil
 }
 
 func (d *LpMpDriver) Stop(force bool) error {
 	d.lc.Info("VirtualDriver.Stop: device-virtual driver is stopping...")
-
+	// 关闭通道
+	close(config.WriteChan)
 	return nil
 }
 
@@ -224,23 +198,19 @@ func (d *LpMpDriver) Stop(force bool) error {
 // 并针对每个 DeviceResource 调用 CopyDeviceValues 进行初始化。
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("新设备已添加: %s", deviceName)
-
-	// 1. 从缓存中获取 Device 对象
+	// 获取 Device 对象
 	dev, err := d.sdk.GetDeviceByName(deviceName)
 	if err != nil {
 		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
 	}
-
-	// 2. 从 Device 中取出 Profile 名称
+	// 从 Device 中取出 Profile 名称
 	profileName := dev.ProfileName
-
-	// 3. 获取对应的 DeviceProfile
+	// 获取对应的 DeviceProfile
 	prof, err := d.sdk.GetProfileByName(profileName)
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-
-	// 4. 针对每个资源执行初始化，传递默认值和类型
+	// 针对每个资源执行初始化，传递默认值和类型
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -250,29 +220,22 @@ func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.Pr
 		}
 		d.lc.Infof("已将设备 %s 的资源 %s 初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 	}
-
 	return nil
 }
 
 func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("Device %s is updated", deviceName)
 
-	// 1. 从缓存中获取 Device 对象
 	dev, err := d.sdk.GetDeviceByName(deviceName)
 	if err != nil {
 		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
 	}
-
-	// 2. 从 Device 中取出 Profile 名称
 	profileName := dev.ProfileName
-
-	// 3. 获取对应的 DeviceProfile
 	prof, err := d.sdk.GetProfileByName(profileName)
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-
-	// 4. 针对每个资源重新初始化，传递默认值和类型
+	// 针对每个资源重新初始化，传递默认值和类型
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -290,18 +253,16 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	d.lc.Debugf("Device %s is removed", deviceName)
 
-	// 1. 删除运行时值表
+	// 删除运行时值表
 	if err := config.DeleteDeviceValues(deviceName); err != nil {
 		d.lc.Errorf("删除设备 %s 的运行时值失败: %v", deviceName, err)
 		return fmt.Errorf("删除设备 %s 的运行时值失败: %w", deviceName, err)
 	}
-
-	// 2. 删除 sensorID 到 deviceName 的所有映射
+	// 删除 sensorID 到 deviceName 的所有映射
 	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {
 		d.lc.Errorf("删除设备 %s 的传感器映射失败: %v", deviceName, err)
 		return fmt.Errorf("删除设备 %s 的传感器映射失败: %w", deviceName, err)
 	}
-
 	d.lc.Infof("已移除设备 %s 的所有运行时数据和映射", deviceName)
 	return nil
 }

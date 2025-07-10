@@ -31,8 +31,7 @@ func StartParser(frameCh <-chan []byte) {
 			// CRC 校验：最后 2 字节为 CRC-16
 			payload := frame[:len(frame)-2]
 			recvCRC := binary.BigEndian.Uint16(frame[len(frame)-2:])
-
-			// 1. 读取6字节SensorID，使用Hex字符串表示
+			// 读取6字节SensorID，使用Hex字符串表示
 			sidBytes := frame[0:6]
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
 			deviceName, hasDevice := config.LookupDeviceName(sensorID)
@@ -40,7 +39,7 @@ func StartParser(frameCh <-chan []byte) {
 				log.Printf("未知 SensorID=%s，跳过本帧", sensorID)
 				continue
 			}
-			// 2. 读取头部：4bit DataLen、1bit FragInd、3bit PacketType
+			// 读取头部：4bit DataLen、1bit FragInd、3bit PacketType
 			head := frame[6]
 			dataCount := int(head >> 4)  // 参量个数
 			fragInd := (head >> 3) & 0x1 // 分片指示
@@ -63,7 +62,6 @@ func StartParser(frameCh <-chan []byte) {
 				log.Println("CRC 校验失败，跳过解析")
 				continue
 			}
-
 			frame_ctl := config.Frame{
 				SensorID:   sensorID,
 				DataLen:    byte(dataCount),
@@ -92,8 +90,7 @@ func StartParser(frameCh <-chan []byte) {
 				// 分片帧
 				ProcessFrame(frame_ctl)
 			}
-
-			// 3. 从第7字节开始解析参数数据，末尾2字节为CRC
+			// 从第7字节开始解析参数数据，末尾2字节为CRC
 			idx := 7
 			parsed := 0
 			for parsed < dataCount {
@@ -106,7 +103,6 @@ func StartParser(frameCh <-chan []byte) {
 				idx += 2
 				paramType := head16 >> 2       // 14bit类型码
 				lenFlag := uint8(head16 & 0x3) // 2bit长度指示
-
 				// 计算真实数据长度
 				var dataLen uint32
 				switch lenFlag {
@@ -122,17 +118,14 @@ func StartParser(frameCh <-chan []byte) {
 					dataLen = uint32(frame[idx])<<16 | uint32(frame[idx+1])<<8 | uint32(frame[idx+2])
 					idx += 3
 				}
-
 				// 数据越界校验
 				if idx+int(dataLen) > len(frame)-2 {
 					log.Printf("参数数据越界 SensorID=%s，跳过本帧", sensorID)
 					break
 				}
-
 				// 提取原始值字节
 				valBytes := frame[idx : idx+int(dataLen)]
 				idx += int(dataLen)
-
 				// 解析数据
 				if info, ok := config.LookupParamInfo(paramType); ok {
 					val, err := info.Parse(valBytes)
@@ -146,10 +139,8 @@ func StartParser(frameCh <-chan []byte) {
 				} else {
 					log.Printf("未找到参数类型信息 type=0x%X", paramType)
 				}
-
 				parsed++
 			}
-
 			// 若未完全解析，跳过后续逻辑
 			if parsed < dataCount {
 				continue
@@ -167,9 +158,8 @@ func StartParser(frameCh <-chan []byte) {
 //     低3位：PacketType (0b001=监测数据响应)
 //   - Data_Status: 上传状态 0xFF 成功，0x00 失败
 //   - CRC16: 对整帧前 8 字节 CRC16 校验，高低字节附加
-
 func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
-	// 1. 解码 SensorKey：将 12 字符十六进制字符串解析为 6 字节
+	// 解码 SensorKey：将 12 字符十六进制字符串解析为 6 字节
 	keyBytes, err := hex.DecodeString(sensorKey)
 	if err != nil {
 		return errors.New("invalid sensorKey hex: " + err.Error())
@@ -177,22 +167,18 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	if len(keyBytes) != 6 {
 		return errors.New("sensorKey hex must decode to 6 bytes")
 	}
-
-	// 2. 构造 Header (1 byte)
+	// 构造 Header (1 byte)
 	const fragInd = 0 // 未分片
 	header := (dataLen<<4)&0xF0 | (fragInd<<3)&0x08 | (packetType & 0x07)
-
-	// 3. 拼接帧：SensorID + Header + Data_Status
+	// 拼接帧：SensorID + Header + Data_Status
 	packet := make([]byte, 0, len(keyBytes)+1+1+2)
 	packet = append(packet, keyBytes...)
 	packet = append(packet, header)
 	packet = append(packet, dataStatus)
-
-	// 4. 计算并追加 CRC16
+	//计算并追加 CRC16
 	crc := CRC16(packet)
 	packet = append(packet, byte(crc>>8), byte(crc&0xFF))
-
-	// 5. 发送
+	//发送
 	serial.SendFrame(sensorKey, packet)
 	return nil
 }

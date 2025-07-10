@@ -19,27 +19,21 @@ func BuildResetRequest(sensorID [6]byte) ([]byte, error) {
 		fragInd        = 0 // 1bit
 		requestSetFlag = 0 // 1bit
 	)
-
-	// 1. 拼前 6 字节 SensorID
+	// 拼 6 字节 SensorID
 	buf := make([]byte, 0, 6+1+1+2)
-
 	buf = append(buf, sensorID[:]...)
-
-	// 2. 拼 head 一字节：DataLen(4)|FragInd(1)|PacketType(3)
+	// 拼 head 一字节：DataLen(4)|FragInd(1)|PacketType(3)
 	head := byte((dataLen&0x0F)<<4) |
 		byte((fragInd&0x01)<<3) |
 		byte(packetType&0x07)
 	buf = append(buf, head)
-
-	// 3. 拼 CtrlType(7bit) + RequestSetFlag(1bit) 共 1 字节
+	// 拼 CtrlType(7bit) + RequestSetFlag(1bit) 共 1 字节
 	ctrlByte := byte((ctrlType&0x7F)<<1) | byte(requestSetFlag&0x01)
 	buf = append(buf, ctrlByte)
-
-	// 4. 计算 CRC16（针对前面所有字节），并以大端序追加 2 字节
+	// 计算 CRC16（针对前面所有字节），并以大端序追加 2 字节
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)
-
 	return buf, nil
 }

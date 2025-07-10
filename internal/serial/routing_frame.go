@@ -37,72 +37,10 @@ func GetTopoList() []config.NodeTopology {
 	return cloned
 }
 
-// // ListenTopo 接口：传入一个原始 +TOP: 行通道，返回一个解析好的拓扑切片通道
-// // 每当遇到一批完整的数据（头部 + 多行 payload + OK）时，就发送一次 []config.NodeTopology。
-// func ListenTopo(rawCh <-chan string) <-chan []config.NodeTopology {
-// 	out := make(chan []config.NodeTopology)
-// 	go func() {
-// 		defer close(out)
-
-// 		var (
-// 			collecting bool   // 是否正在收集 payload
-// 			buffer     string // 当前批次累积的 payload 文本
-// 		)
-
-// 		for line := range rawCh {
-// 			line = strings.TrimSpace(line)
-// 			fmt.Printf("1111111222222222")
-// 			fmt.Printf("%s", line)
-
-// 			switch {
-// 			// 1) 头部行，含有前缀 +TOP:
-// 			case strings.HasPrefix(line, "+TOP:"):
-// 				collecting = true
-// 				// 拆出 header 之后的那段可能的 payload
-// 				parts := strings.SplitN(line[len("+TOP:"):], ",", 3)
-// 				if len(parts) >= 3 {
-// 					buffer = parts[2]
-// 				} else {
-// 					buffer = ""
-// 				}
-// 				log.Printf("[ListenTopo] 开始新批次，header payload=%q", buffer)
-
-// 			// 2) 收集中碰到 OK：结束本批次，解析并输出
-// 			case collecting && line == "OK":
-// 				log.Printf("[StartTopo] 收到 OK，解析 buffer=%q", buffer)
-// 				nodes, err := parseBuffer(buffer)
-// 				if err != nil {
-// 					log.Printf("[StartTopo] 解析失败: %v", err)
-// 				} else {
-// 					topoMu.Lock()
-// 					TopoList = nodes
-// 					topoMu.Unlock()
-// 					log.Printf("[StartTopo] 更新全局 TopoList: %+v", nodes)
-// 				}
-// 				// 重置状态
-// 				collecting = false
-// 				buffer = ""
-
-// 			// 3) 收集中，其它行都当作 payload 继续追加
-// 			case collecting:
-// 				// 去掉行尾逗号再拼接
-// 				piece := strings.TrimSuffix(line, ",")
-// 				buffer += "," + piece
-// 				log.Printf("[ListenTopo] 累计 payload=%q", buffer)
-
-//				// 4) 默认：非 +TOP 也不在收集状态，忽略
-//				default:
-//					// no-op
-//				}
-//			}
-//		}()
-//		return out
-//	}
-//
-// StartTopoProcessor 从 rawCh 读取完整的 +TOP:…OK 块，直接解析并更新全局 TopoList
+// StartTopoProcessor 从 rawCh 读取完整的 +TOP:…OK 块，直接解析并更新TopoList
 func StartTopoProcessor(rawCh <-chan string) {
 	go func() {
-		// 一次性读取并解析完整块，不再收集多行
+		// 一次性读取并解析完整块
 		for block := range rawCh {
 			line := strings.TrimSpace(block)
 			// 只处理以 +TOP: 开头并以 OK 结尾的完整块
@@ -117,7 +55,7 @@ func StartTopoProcessor(rawCh <-chan string) {
 				log.Printf("[StartTopo] 解析失败: %v", err)
 				continue
 			}
-			// 更新全局缓存
+			// 更新
 			topoMu.Lock()
 			TopoList = nodes
 			topoMu.Unlock()
@@ -128,10 +66,11 @@ func StartTopoProcessor(rawCh <-chan string) {
 
 // parseBuffer 把 "E1,t1,s1,p1,E2,t2,s2,p2,..." 拆成 []NodeTopology
 func parseBuffer(buf string) ([]config.NodeTopology, error) {
+	buf = strings.Trim(buf, ",")
 	fields := strings.Split(buf, ",")
-	// if len(fields)%4 != 0 {
-	// 	return nil, fmt.Errorf("字段数 %d 不是 4 的倍数", len(fields))
-	// }
+	if len(fields)%4 != 0 {
+		return nil, fmt.Errorf("字段数 %d 不是 4 的倍数", len(fields))
+	}
 	count := len(fields) / 4
 	list := make([]config.NodeTopology, 0, count)
 	for i := 0; i < count; i++ {
