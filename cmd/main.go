@@ -8,16 +8,16 @@ package main
 
 import (
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/startup"
-
-	device_virtual "github.com/edgexfoundry/device-virtual-go"
 	"github.com/linjuya-lu/device-lpmp-go/internal/driver"
 )
 
 const (
 	serviceName string = "device-lpmp"
+	Version     string = "HYV1.0"
 )
 
 func main() {
 	d := driver.LpMpDeviceDriver()
-	startup.Bootstrap(serviceName, device_virtual.Version, d)
+	startup.Bootstrap(serviceName, Version, d)
+
 }

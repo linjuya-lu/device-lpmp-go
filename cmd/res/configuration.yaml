@@ -1,4 +1,4 @@
-MaxEventSize: 0 # value 0 unlimit the maximum event size that can be sent to message bus or core-data
+MaxEventSize: 0 
 Writable:
   LogLevel: INFO
 
@@ -12,6 +12,7 @@ MessageBus:
     ClientId: device-lpmp
 
 Device:
-  # These have common values (currently), but must be here for service local env overrides to apply when customized
+  EnableAsyncReadings: true     # 开启异步上报
+  AsyncBufferSize: 16           # 设置异步上报缓冲通道个数
   ProfilesDir: "./res/profiles"
   DevicesDir: "./res/devices"
