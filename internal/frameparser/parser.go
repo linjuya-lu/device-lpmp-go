@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
@@ -39,6 +40,7 @@ func StartParser(frameCh <-chan []byte) {
 				log.Printf("未知 SensorID=%s，跳过本帧", sensorID)
 				continue
 			}
+			onDataReceived(deviceName)
 			// 读取头部：4bit DataLen、1bit FragInd、3bit PacketType
 			head := frame[6]
 			dataCount := int(head >> 4)  // 参量个数
@@ -181,4 +183,10 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	//发送
 	serial.SendFrame(sensorKey, packet)
 	return nil
+}
+
+func onDataReceived(deviceName string) {
+	// 比如我们要把当前时间戳（纳秒）写入 lastDataTimestamp 这个资源
+	ts := time.Now().UnixNano()
+	config.SetDeviceValue(deviceName, "lastDataTimestamp", ts)
 }

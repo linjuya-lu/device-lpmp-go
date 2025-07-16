@@ -1,0 +1,49 @@
+package driver
+
+import (
+	"fmt"
+	"math/rand/v2"
+	"time"
+
+	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
+)
+
+// 异步主动上报数据
+func (s *LpMpDriver) simulateAsyncReporting() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		deviceName := "Data-Demo"
+		sourceName := "Sensor_Parameter"
+		origin := time.Now().UnixNano()
+
+		// 构造异步模拟数据 Length
+		asyncValue, err := dsModels.NewCommandValue("Length", common.ValueTypeInt32, rand.Int32())
+		if err != nil {
+			s.lc.Error(fmt.Sprintf("Failed to create Length CommandValue: %v", err))
+			continue
+		}
+		asyncValue.Origin = origin
+
+		asyncValue1, err := dsModels.NewCommandValue("EID", common.ValueTypeInt32, rand.Int32())
+		if err != nil {
+			s.lc.Error(fmt.Sprintf("Failed to create Length CommandValue: %v", err))
+			continue
+		}
+		asyncValue1.Origin = origin
+
+		// 封装 AsyncValues
+		asyncValues := &dsModels.AsyncValues{
+			DeviceName:    deviceName,
+			SourceName:    sourceName,
+			CommandValues: []*dsModels.CommandValue{asyncValue, asyncValue1},
+		}
+
+		// 推送到 SDK 的异步通道
+		s.asyncCh <- asyncValues
+
+		s.lc.Debugf("AsyncTest Values pushed: %+v", asyncValues)
+	}
+}

@@ -41,8 +41,8 @@ var (
 // 要求 len(value) == entry.length，否则报错；
 // data 会被完整拷贝到内部存储。
 func UpdateData(name string, value []byte) error {
-	mu.Lock()
-	defer mu.Unlock()
+	Mu.Lock()
+	defer Mu.Unlock()
 
 	e, ok := table[name]
 	if !ok {
@@ -59,8 +59,8 @@ func UpdateData(name string, value []byte) error {
 // GetPacketFields 返回当前全量“头域+数据域”组合后的字节切片副本，map[key]=[]byte{head16_lo, head16_hi, ...data}
 // head16 按小端序存储在前面 2 字节，后面紧跟 data。
 func GetPacketFields() map[string][]byte {
-	mu.RLock()
-	defer mu.RUnlock()
+	Mu.RLock()
+	defer Mu.RUnlock()
 
 	out := make(map[string][]byte, len(table))
 	for name, e := range table {
@@ -76,8 +76,8 @@ func GetPacketFields() map[string][]byte {
 
 // GetEntryCopy 返回某个参数的当前 Entry 副本，包含 head16、length 和 data 副本
 func GetEntryCopy(name string) (Entry, error) {
-	mu.RLock()
-	defer mu.RUnlock()
+	Mu.RLock()
+	defer Mu.RUnlock()
 
 	e, ok := table[name]
 	if !ok {

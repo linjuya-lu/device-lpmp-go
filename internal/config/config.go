@@ -48,11 +48,11 @@ type profileYAML struct {
 
 var (
 	// mu 保护下面的静态资源表和运行时值表
-	mu sync.RWMutex
+	Mu sync.RWMutex
 	// resourcesMap 存储所有设备的静态资源定义，key 为设备逻辑名称
 	resourcesMap = make(map[string][]DeviceResource)
 	// valuesMap 存储所有设备的运行时资源值，key: 设备名称 → (资源名称 → value)
-	valuesMap = make(map[string]map[string]interface{})
+	ValuesMap = make(map[string]map[string]interface{})
 )
 
 // parseDefaultValue 根据 ValueType 将 DefaultValue 字符串转换为对应类型
@@ -104,8 +104,8 @@ func InitDeviceResources(devicesPath, profilesDir string) error {
 	if err := yaml.Unmarshal(raw, &devs); err != nil {
 		return fmt.Errorf("解析 devices.yaml 失败：%w", err)
 	}
-	mu.Lock()
-	defer mu.Unlock()
+	Mu.Lock()
+	defer Mu.Unlock()
 	// 加载并写入静态资源和默认值表
 	for _, entry := range devs.DeviceList {
 		profileFile := filepath.Join(profilesDir, entry.ProfileName+".yaml")
@@ -120,9 +120,9 @@ func InitDeviceResources(devicesPath, profilesDir string) error {
 		// 保存静态定义
 		resourcesMap[entry.Name] = prof.DeviceResources
 		// 初始化运行时值为 DefaultValue
-		valuesMap[entry.Name] = make(map[string]interface{}, len(prof.DeviceResources))
+		ValuesMap[entry.Name] = make(map[string]interface{}, len(prof.DeviceResources))
 		for _, dr := range prof.DeviceResources {
-			valuesMap[entry.Name][dr.Name] = parseDefaultValue(dr.Properties.DefaultValue, dr.Properties.ValueType)
+			ValuesMap[entry.Name][dr.Name] = parseDefaultValue(dr.Properties.DefaultValue, dr.Properties.ValueType)
 		}
 	}
 	return nil
@@ -131,29 +131,29 @@ func InitDeviceResources(devicesPath, profilesDir string) error {
 // GetDeviceResources 并发安全地获取指定设备的静态资源列表
 // 返回值: []DeviceResource, bool(是否存在)
 func GetDeviceResources(deviceName string) ([]DeviceResource, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
+	Mu.RLock()
+	defer Mu.RUnlock()
 	res, ok := resourcesMap[deviceName]
 	return res, ok
 }
 
 // SetDeviceValue 并发安全地写入解析后的单个资源值
 func SetDeviceValue(deviceName, resourceName string, value interface{}) {
-	mu.Lock()
-	defer mu.Unlock()
-	if _, ok := valuesMap[deviceName]; !ok {
-		valuesMap[deviceName] = make(map[string]interface{})
+	Mu.Lock()
+	defer Mu.Unlock()
+	if _, ok := ValuesMap[deviceName]; !ok {
+		ValuesMap[deviceName] = make(map[string]interface{})
 	}
-	valuesMap[deviceName][resourceName] = value
+	ValuesMap[deviceName][resourceName] = value
 }
 
 // GetDeviceValue 并发安全地获取指定设备的单个资源值
 // 返回值: interface{}, bool(是否存在)
 func GetDeviceValue(deviceName, resourceName string) (interface{}, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
+	Mu.RLock()
+	defer Mu.RUnlock()
 	//  检查设备是否存在
-	deviceValues, ok := valuesMap[deviceName]
+	deviceValues, ok := ValuesMap[deviceName]
 	if !ok {
 		return nil, false
 	}
@@ -165,9 +165,9 @@ func GetDeviceValue(deviceName, resourceName string) (interface{}, bool) {
 // GetDeviceValues 并发安全地获取指定设备的所有运行时资源值
 // 返回值: map[resourceName]value, bool(是否存在)
 func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
-	vals, ok := valuesMap[deviceName]
+	Mu.RLock()
+	defer Mu.RUnlock()
+	vals, ok := ValuesMap[deviceName]
 	if !ok {
 		return nil, false
 	}
@@ -181,28 +181,28 @@ func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
 
 // DeviceInit 初始化设备资源并设置正确类型的默认值
 func DeviceInit(deviceName, resourceName, defaultValue, valueType string) error {
-	mu.Lock()
-	defer mu.Unlock()
+	Mu.Lock()
+	defer Mu.Unlock()
 	// 确保设备在 valuesMap 中有对应的映射
-	if _, exists := valuesMap[deviceName]; !exists {
-		valuesMap[deviceName] = make(map[string]interface{})
+	if _, exists := ValuesMap[deviceName]; !exists {
+		ValuesMap[deviceName] = make(map[string]interface{})
 	}
 	// 使用现有的解析函数转换默认值
 	parsedValue := parseDefaultValue(defaultValue, valueType)
-	valuesMap[deviceName][resourceName] = parsedValue
+	ValuesMap[deviceName][resourceName] = parsedValue
 	return nil
 }
 
 // DeleteDeviceValues 删除指定设备的所有运行时值
 func DeleteDeviceValues(deviceName string) error {
-	mu.Lock()
-	defer mu.Unlock()
+	Mu.Lock()
+	defer Mu.Unlock()
 	// 检查设备是否存在
-	if _, exists := valuesMap[deviceName]; !exists {
+	if _, exists := ValuesMap[deviceName]; !exists {
 		return fmt.Errorf("设备 %s 不存在于运行时值表中", deviceName)
 	}
 	// 删除设备的所有运行时值
-	delete(valuesMap, deviceName)
+	delete(ValuesMap, deviceName)
 	return nil
 }
 

@@ -52,3 +52,33 @@ func LookupDeviceName(sensorID string) (deviceName string, ok bool) {
 	deviceName, ok = SensorIDToDeviceName[sensorID]
 	return
 }
+
+// UpdateSensorMapping 扫描 valuesMap，把资源名为 "EID" 的值映射到设备名
+func UpdateSensorMapping() {
+	mu1.Lock()
+	defer mu1.Unlock()
+
+	// 清空旧映射
+	SensorIDToDeviceName = make(map[string]string)
+
+	for deviceName, resourceMap := range ValuesMap {
+		raw, exists := resourceMap["eid"]
+		if !exists {
+			continue
+		}
+		var eid string
+		switch v := raw.(type) {
+		case string:
+			eid = v
+		case []byte:
+			eid = string(v)
+		default:
+			// 其他类型统一用 fmt.Sprint 转成字符串
+			eid = fmt.Sprint(v)
+		}
+		if eid == "" {
+			continue
+		}
+		SensorIDToDeviceName[eid] = deviceName
+	}
+}

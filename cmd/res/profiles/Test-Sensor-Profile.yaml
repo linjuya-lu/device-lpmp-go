@@ -62,6 +62,14 @@ deviceResources:
       readWrite: "R"
       units: "code"
       defaultValue: "0"
+  - name: "period"
+    isHidden: false
+    description: "上报周期（秒）"
+    properties:
+      valueType: "Uint32"  # 秒数通常不会超过 2^32
+      readWrite: "R"
+      units: "s"
+      defaultValue: "0"
 
 deviceCommands:
   -

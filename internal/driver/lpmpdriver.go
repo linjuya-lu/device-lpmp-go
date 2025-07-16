@@ -71,6 +71,10 @@ func (d *LpMpDriver) Start() error {
 	}()
 	// 启动 topology 处理器，不要赋值给任何变量
 	serial.StartTopoProcessor(serial.TopoChan)
+	//做EID和设备名的初步映射
+	config.UpdateSensorMapping()
+	// d.simulateAsyncReporting() //模拟异步上传
+	startHealthCheckLoop() //状态控制函数
 	d.lc.Infof("串口监听和解析已启动")
 	return nil
 }
