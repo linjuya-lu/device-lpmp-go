@@ -12,6 +12,12 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
+// CallbackFunc 定义当解析完成时的回调签名
+// deviceName: 设备名称
+// sourceName: 上报的源名称，可自定义
+// resourceNames: 已解析的资源名列表
+type CallbackFunc func(deviceName, sourceName string, resourceNames []string)
+
 // StartParser 从 frameCh 通道中持续读取完整帧，启动一个后台协程进行业务数据解析。
 // 依照《Q/GDW 12184—2021》附录 D 业务报文格式，实现以下功能：
 // 1. 提取 SensorID、报文类型（仅处理业务数据：监测和告警）  控制报文与控制报文响应单独函数处理
@@ -21,7 +27,7 @@ import (
 // 5. 将数值按表大端转换为 float32/float64/int8等基本类型
 // 6. 针对已知 SensorID（如"238A08262319"水位传感器），调用 config.SetDeviceValue 存储解析结果
 // 7. 异常或格式不符时跳过本帧，确保解析循环不中断
-func StartParser(frameCh <-chan []byte) {
+func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 	go func() {
 		for frame := range frameCh {
 			// 最小长度校验：6字节ID +1字节头 +2字节CRC
@@ -95,6 +101,7 @@ func StartParser(frameCh <-chan []byte) {
 			// 从第7字节开始解析参数数据，末尾2字节为CRC
 			idx := 7
 			parsed := 0
+			var resources []string
 			for parsed < dataCount {
 				// 参数头2字节
 				if idx+2 > len(frame)-2 {
@@ -146,6 +153,10 @@ func StartParser(frameCh <-chan []byte) {
 			// 若未完全解析，跳过后续逻辑
 			if parsed < dataCount {
 				continue
+			}
+			// 解析完成，调用回调
+			if cb != nil && len(resources) > 0 {
+				cb(deviceName, "AsyncReporting", resources)
 			}
 		}
 	}()

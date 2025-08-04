@@ -60,7 +60,7 @@ func (d *LpMpDriver) Start() error {
 	frameCh := make(chan []byte, 100)
 	serial.StartSerialScanner(serialPort)
 	// 解析协程
-	frameparser.StartParser(frameCh)
+	frameparser.StartParser(frameCh, d.AsyncReporting)
 	//写协程
 	serial.StartWriteWorker(serialPort)
 	//分片解析协程

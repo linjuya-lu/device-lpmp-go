@@ -14,13 +14,13 @@ import (
 //	deviceName    设备名称
 //	sourceName    上报用的 sourceName
 //	resourceNames 要上报的资源名列表（仅取第一个），每个元素都会作为 NewCommandValue 的第一个参数
-func (s *LpMpDriver) simulateAsyncReporting(
+func (d *LpMpDriver) AsyncReporting(
 	deviceName string,
 	sourceName string,
 	resourceNames []string,
 ) {
 	if len(resourceNames) == 0 {
-		s.lc.Warn("simulateAsyncReporting: 未提供任何资源名，跳过上报")
+		d.lc.Warn("simulateAsyncReporting: 未提供任何资源名，跳过上报")
 		return
 	}
 
@@ -33,7 +33,7 @@ func (s *LpMpDriver) simulateAsyncReporting(
 		rand.Int32(),          // 随机值或您自己的生成逻辑
 	)
 	if err != nil {
-		s.lc.Error(fmt.Sprintf("NewCommandValue(%s) 失败: %v", name, err))
+		d.lc.Error(fmt.Sprintf("NewCommandValue(%s) 失败: %v", name, err))
 		return
 	}
 	cv.Origin = origin
@@ -45,7 +45,7 @@ func (s *LpMpDriver) simulateAsyncReporting(
 		CommandValues: []*dsModels.CommandValue{cv},
 	}
 
-	s.asyncCh <- async
-	s.lc.Debugf("AsyncValues pushed: device=%s source=%s value=%+v",
+	d.asyncCh <- async
+	d.lc.Debugf("AsyncValues pushed: device=%s source=%s value=%+v",
 		deviceName, sourceName, cv)
 }
