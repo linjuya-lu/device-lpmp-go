@@ -22,14 +22,14 @@ deviceResources:
       readWrite: "R"        
       units: ""            
       defaultValue: "{}"     
-  - name: "EID"                # 设备唯一标识
+  - name: "eid"                # 设备唯一标识
     isHidden: false                   
     description: ""
     properties:
       valueType: "String"            
       readWrite: "R"                 
       units: ""                      
-      defaultValue: ""    
+      defaultValue: "238A08262319"    
   - name: "Length"                # 长度
     isHidden: false                   
     description: "长度"

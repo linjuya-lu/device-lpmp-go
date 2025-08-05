@@ -44,3 +44,12 @@ deviceList:
       custom:
         location: /dev/ttyUSB0
         baudRate: "115200"
+  - name: "Sink-Node"
+    profileName: "Sink-Node-Profile"
+    description: "汇源汇聚节点"
+    labels:
+      - sinke-node
+    protocols:
+      custom:
+        location: /dev/ttyUSB0
+        baudRate: "115200"

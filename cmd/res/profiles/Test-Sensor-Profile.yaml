@@ -29,7 +29,7 @@ deviceResources:
       valueType: "String"            
       readWrite: "R"                 
       units: ""                      
-      defaultValue: "238A08262319"    
+      defaultValue: "238A0821BF34"    
   - name: "length"                # 长度
     isHidden: true                   
     description: "长度"

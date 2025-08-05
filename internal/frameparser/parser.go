@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ type CallbackFunc func(deviceName, sourceName string, resourceNames []string)
 func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 	go func() {
 		for frame := range frameCh {
+			fmt.Printf("Received frame (%d bytes): % X\n", len(frame), frame)
 			// 最小长度校验：6字节ID +1字节头 +2字节CRC
 			if len(frame) < 9 {
 				log.Println("帧长度不足，跳过解析")
@@ -43,7 +45,11 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
 			deviceName, hasDevice := config.LookupDeviceName(sensorID)
 			if !hasDevice {
-				log.Printf("未知 SensorID=%s，跳过本帧", sensorID)
+				log.Printf("SensorIDToDeviceName keys: %#v", config.SensorIDToDeviceName)
+
+				log.Printf(">>[%s]<<", sensorID)
+
+				log.Printf("未知11 SensorID=%s，跳过本帧", sensorID)
 				continue
 			}
 			onDataReceived(deviceName)

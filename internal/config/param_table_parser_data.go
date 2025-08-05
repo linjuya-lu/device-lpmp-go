@@ -71,7 +71,21 @@ var paramMap = map[ParamKey]ParamInfo{
 	{0b000, 0b00001100101}: {"StressOrPressure", "Pa", 4, "float32", parseFloat32},
 	{0b000, 0b00001100110}: {"VibrationSpectrum", "m/s²", -1, "float32[]", parsefloat32Array},
 	{0b000, 0b00001100111}: {"Force", "N", 4, "float32", parseFloat32},
-
+	//-------------------------------------------------------D.2输电业务状态参量类型表----------------------------------------------------
+	{0b001, 0b00000000001}: {"10minAvgWindSpeed", "m/s", 4, "float32", parseFloat32},
+	{0b001, 0b00000000010}: {"10minAvgWindDirection", "°", 2, "int16", parseInt16},
+	{0b001, 0b00000000011}: {"MaxWindSpeed", "m/s", 4, "float32", parseFloat32},
+	{0b001, 0b00000100100}: {"ExtremeWindSpeed", "m/s", 4, "float32", parseFloat32},
+	{0b001, 0b0000010101}:  {"StandardWindSpeed", "m/s", 4, "float32", parseFloat32},
+	{0b001, 0b00000110}:    {"Temperature1", "°C", 4, "float32", parseFloat32},
+	{0b001, 0b00000111}:    {"Humidity1", "%RH", 2, "uint16", parseUint16},
+	{0b001, 0b00001000}:    {"Pressure", "hPa", 4, "float32", parseFloat32},
+	{0b001, 0b00001001}:    {"Rainfall10min", "mm", 4, "float32", parseFloat32},
+	{0b001, 0b00001010}:    {"RainIntensity", "mm/min", 4, "float32", parseFloat32},
+	{0b001, 0b00001011}:    {"SolarRadiation", "W/m2", 2, "uint16", parseUint16},
+	{0b001, 0b00001100}:    {"InstantWindSpeed", "m/s", 4, "float32", parseFloat32},
+	{0b001, 0b00001101}:    {"InstantWindDirection", "°", 2, "int16", parseInt16},
+	{0b001, 0b00001110}:    {"WindDirectionDeviation", "°", 2, "int16", parseInt16},
 	//-------------------------------------------------------D.3变电业务状态状态参量类型表------------------------------------------------
 	//避雷器泄露电流传感器
 	// 1 避雷器泄漏电流全电流
@@ -360,4 +374,15 @@ func parseUint16Array(data []byte) (any, error) {
 		values[i] = binary.LittleEndian.Uint16(data[i*2 : i*2+2])
 	}
 	return values, nil
+}
+
+// parseInt16 将 2 字节的小端序数据解析为 int16
+func parseInt16(data []byte) (any, error) {
+	if len(data) != 2 {
+		return nil, fmt.Errorf("期望2字节，实际%d", len(data))
+	}
+	u := binary.LittleEndian.Uint16(data)
+	// 将 uint16 按位模式转换为 int16
+	val := int16(u)
+	return val, nil
 }

@@ -57,10 +57,10 @@ func (d *LpMpDriver) Start() error {
 		return fmt.Errorf("打开串口 %s 失败: %w", portName, err)
 	}
 	// AT+DRX 监听，二进制帧推到 frameCh
-	frameCh := make(chan []byte, 100)
+	// frameCh := make(chan []byte, 100)
 	serial.StartSerialScanner(serialPort)
 	// 解析协程
-	frameparser.StartParser(frameCh, d.AsyncReporting)
+	frameparser.StartParser(serial.DrxChan, d.AsyncReporting)
 	//写协程
 	serial.StartWriteWorker(serialPort)
 	//分片解析协程
@@ -191,7 +191,7 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 }
 
 func (d *LpMpDriver) Stop(force bool) error {
-	d.lc.Info("VirtualDriver.Stop: device-virtual driver is stopping...")
+	d.lc.Info("LpmpDriver.Stop: device-lpmp driver is stopping...")
 	// 关闭通道
 	close(config.WriteChan)
 	return nil

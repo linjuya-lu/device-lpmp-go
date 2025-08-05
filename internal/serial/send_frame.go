@@ -35,7 +35,6 @@ func StartWriteWorker(port io.ReadWriteCloser) {
 	}()
 }
 
-// SendFrame 向全局通道投递数据，供写协程发送
 func SendFrame(dstAddr string, payload []byte) {
 	// 逐字节格式化
 	var parts []string
@@ -43,8 +42,8 @@ func SendFrame(dstAddr string, payload []byte) {
 		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
 	hexStr := strings.Join(parts, "") // 合并字符串
-	// 拼成 AT 命令
-	cmd := fmt.Sprintf("\rAT+DTXSTR=%s,%s\r\n", dstAddr, hexStr)
+	// AT 命令
+	cmd := fmt.Sprintf("\rAT+DTX=%s,%s\r\n", dstAddr, hexStr)
 	// 调试
 	fmt.Printf(">> Sending AT command: %s", cmd)
 	// 发送

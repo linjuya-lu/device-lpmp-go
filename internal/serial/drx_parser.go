@@ -102,41 +102,10 @@ func StartDRXListener(port io.Reader, frameCh chan<- []byte) {
 }
 
 // DRX数据通道
-var drxChan = make(chan []byte, 100)
+var DrxChan = make(chan []byte, 100)
 
 // TOP原始行通道（给topology收集器用）
 var TopoChan = make(chan string, 100)
-
-// func StartSerialScanner(port io.Reader) {
-// 	go func() {
-// 		scanner := bufio.NewScanner(port)
-// 		for scanner.Scan() {
-// 			line := strings.TrimSpace(scanner.Text())
-// 			// TopoChan <- line
-// 			switch {
-// 			case strings.HasPrefix(line, "+TOP:"):
-// 				fmt.Printf("%s", line)
-// 				// 丢给 topology 那边去处理多行粘包
-// 				TopoChan <- line
-
-// 			case strings.HasPrefix(line, "+DRX:"):
-// 				// 丢给 DRX 解析器
-// 				data, err := ParseDRXLine(line)
-// 				if err == nil {
-// 					drxChan <- data
-// 				}
-
-// 			default:
-// 				// 你还可以在这里把所有行推给 rawChan
-// 				// rawChan <- line
-// 				continue
-// 			}
-// 		}
-// 		// 退出的时候别忘了关通道
-// 		// close(drxChan)
-// 		// close(topoChan)
-// 	}()
-// }
 
 // StartSerialScanner 从 port 里读数据：
 // - 对于以 +DRX: 开头的行，按原逻辑交给 ParseDRXLine/drxChan。
@@ -162,7 +131,7 @@ func StartSerialScanner(port io.Reader) {
 			if strings.HasPrefix(line, "+DRX:") {
 				data, err := ParseDRXLine(line)
 				if err == nil {
-					drxChan <- data
+					DrxChan <- data
 				}
 				// DRX 行即便也可能带 +TOP:，按你原始逻辑先处理 DRX
 				continue
@@ -192,6 +161,6 @@ func StartSerialScanner(port io.Reader) {
 			}
 		}
 		close(TopoChan)
-		close(drxChan)
+		close(DrxChan)
 	}()
 }
