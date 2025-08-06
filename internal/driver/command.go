@@ -46,8 +46,8 @@ func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
 	// 构建复位帧
-	loc := time.FixedZone("CST", 8*3600)    // 北京时区
-	ts := uint32(time.Now().In(loc).Unix()) // 当前时间转为世纪秒
+	loc := time.FixedZone("UTC-0", 0) // UTC
+	ts := uint32(time.Now().In(loc).Unix())
 
 	// 发送帧
 	reqFrame, _ := frameparser.BuildTimeParamFrame(sensorID, 1, ts)

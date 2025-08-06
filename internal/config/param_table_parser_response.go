@@ -66,14 +66,15 @@ func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
 }
 
 // ===================== 通用解析函数 =====================
-var Resources1 []string
+var Resources1 = make(map[string]interface{})
 var ResourcesFlag bool = false
 
 // 通用参数查询/设置
 func common_para_response(data []byte, frameCtl Frame) error {
 	idx := 0
 	parsed := 0
-	Resources1 = Resources1[:0]
+	Resources1 = make(map[string]interface{})
+
 	ResourcesFlag = false
 	for parsed < int(frameCtl.DataLen) {
 		// 参数头2字节
@@ -125,7 +126,8 @@ func common_para_response(data []byte, frameCtl Frame) error {
 			} else {
 				// 写入运行时值表
 				SetDeviceValue(deviceName, info.Name, val)
-				Resources1 = append(Resources1, info.Name)
+				Resources1[info.Name] = val
+
 				log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 			}
 		} else {

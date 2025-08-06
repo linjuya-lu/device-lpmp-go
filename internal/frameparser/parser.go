@@ -17,7 +17,7 @@ import (
 // deviceName: 设备名称
 // sourceName: 上报的源名称，可自定义
 // resourceNames: 已解析的资源名列表
-type CallbackFunc func(deviceName, sourceName string, resourceNames []string)
+type CallbackFunc func(deviceName, sourceName string, values map[string]interface{})
 
 // StartParser 从 frameCh 通道中持续读取完整帧，启动一个后台协程进行业务数据解析。
 // 依照《Q/GDW 12184—2021》附录 D 业务报文格式，实现以下功能：
@@ -29,6 +29,8 @@ type CallbackFunc func(deviceName, sourceName string, resourceNames []string)
 // 6. 针对已知 SensorID（如"238A08262319"水位传感器），调用 config.SetDeviceValue 存储解析结果
 // 7. 异常或格式不符时跳过本帧，确保解析循环不中断
 func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
+	fmt.Printf("[StartParser] cb=%p\n", cb)
+
 	go func() {
 		for frame := range frameCh {
 			fmt.Printf("Received frame (%d bytes): % X\n", len(frame), frame)
@@ -112,7 +114,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			// 从第7字节开始解析参数数据，末尾2字节为CRC
 			idx := 7
 			parsed := 0
-			var resources []string
+			resourceValues := make(map[string]interface{})
 			for parsed < dataCount {
 				// 参数头2字节
 				if idx+2 > len(frame)-2 {
@@ -157,7 +159,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					} else {
 						// 写入运行时值表
 						config.SetDeviceValue(deviceName, info.Name, val)
-						resources = append(resources, info.Name)
+						resourceValues[info.Name] = val
 						log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 					}
 				} else {
@@ -165,13 +167,22 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				}
 				parsed++
 			}
+			log.Printf("[DEBUG] parsed=%d dataCount=%d len(resourceValues)=%d cb=%v",
+				parsed, dataCount, len(resourceValues), cb != nil)
+			// if parsed < dataCount {
+			// 	log.Printf("[WARN] 只解析了 %d/%d 个参数，仍然执行回调", parsed, dataCount)
+			// }
+
+			// 解析完成，调用回调
+			fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
+
+			if cb != nil && len(resourceValues) > 0 {
+				fmt.Printf("11111111112222222222222")
+				cb(deviceName, "AsyncReporting", resourceValues)
+			}
 			// 若未完全解析，跳过后续逻辑
 			if parsed < dataCount {
 				continue
-			}
-			// 解析完成，调用回调
-			if cb != nil && len(resources) > 0 {
-				cb(deviceName, "AsyncReporting", resources)
 			}
 		}
 	}()
