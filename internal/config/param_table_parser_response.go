@@ -2,7 +2,10 @@ package config
 
 import (
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -43,12 +46,15 @@ type ResponseHandle struct {
 }
 
 var ResponseMap = map[ResponseKey]ResponseHandle{
-	{CtrlType: 0x01, RequestSetFlag: false}: {common_para_response},
-	{CtrlType: 0x01, RequestSetFlag: true}:  {common_para_response},
+	{CtrlType: 0x02, RequestSetFlag: false}: {common_para_response},
+	{CtrlType: 0x02, RequestSetFlag: true}:  {common_para_response},
 	{CtrlType: 0x04, RequestSetFlag: true}:  {timestamp_response},
-	{CtrlType: 0x04, RequestSetFlag: true}:  {timestamp_response},
+	{CtrlType: 0x03, RequestSetFlag: true}:  {timestamp_response},
+	{CtrlType: 0x06, RequestSetFlag: false}: {reset_response},
 	{CtrlType: 0x06, RequestSetFlag: true}:  {reset_response},
-	{CtrlType: 0x06, RequestSetFlag: true}:  {reset_response},
+	{CtrlType: 0x04, RequestSetFlag: false}: {timestamp_response},
+	{CtrlType: 0x07, RequestSetFlag: false}: {resetCommands},
+	{CtrlType: 0x07, RequestSetFlag: false}: {resetCommands},
 }
 
 func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
@@ -60,11 +66,15 @@ func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
 }
 
 // ===================== 通用解析函数 =====================
+var Resources1 []string
+var ResourcesFlag bool = false
 
 // 通用参数查询/设置
 func common_para_response(data []byte, frameCtl Frame) error {
 	idx := 0
 	parsed := 0
+	Resources1 = Resources1[:0]
+	ResourcesFlag = false
 	for parsed < int(frameCtl.DataLen) {
 		// 参数头2字节
 		if idx+2 > len(data)-2 {
@@ -115,6 +125,7 @@ func common_para_response(data []byte, frameCtl Frame) error {
 			} else {
 				// 写入运行时值表
 				SetDeviceValue(deviceName, info.Name, val)
+				Resources1 = append(Resources1, info.Name)
 				log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 			}
 		} else {
@@ -123,21 +134,28 @@ func common_para_response(data []byte, frameCtl Frame) error {
 
 		parsed++
 	}
+	ResourcesFlag = true
 	return nil
 }
 
 // 时间参数查询/设置
 func timestamp_response(data []byte, frameCtl Frame) error {
 
-	secs := binary.LittleEndian.Uint32(data)
+	// secs := binary.LittleEndian.Uint32(data)
 	// 转换为本地时区时间
-	t := time.Unix(int64(secs), 0)
+	// t := time.Unix(int64(secs), 0)
 	deviceName, hasDevice := LookupDeviceName(frameCtl.SensorID)
 	if !hasDevice {
 		log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
 	}
 	timestamp_ctl := "timestamp"
-	SetDeviceValue(deviceName, timestamp_ctl, t)
+	log.Printf("data[0] = 0x%02X", data[0]) // %02X 表示两位十六进制，大写
+	secs := binary.LittleEndian.Uint32(data[0:4])
+	t := time.Unix(int64(secs), 0) // 秒 -> 时间
+	log.Printf("世纪秒=%d 时间=%s", secs, t.Format("2006-01-02 15:04:05"))
+
+	strVal := strconv.Itoa(int(data[0]))
+	SetDeviceValue(deviceName, timestamp_ctl, strVal)
 	return nil
 }
 
@@ -149,6 +167,47 @@ func reset_response(data []byte, frameCtl Frame) error {
 		log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
 	}
 	reset_ctl := "reset_ctl"
-	SetDeviceValue(deviceName, reset_ctl, data[0])
+	strVal := strconv.Itoa(int(data[0]))
+	SetDeviceValue(deviceName, reset_ctl, strVal)
+	return nil
+}
+
+func resetCommands(data []byte, frameCtl Frame) error {
+
+	deviceName, hasDevice := LookupDeviceName(frameCtl.SensorID)
+	if !hasDevice {
+		log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
+	}
+	eidValue, ok := GetDeviceValue(deviceName, "eid")
+	if !ok {
+		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
+		return err
+	}
+	eidStr, ok := eidValue.(string)
+	if !ok {
+		err := fmt.Errorf("设备 %s 的 EID 类型错误，期望 string，实际 %T", deviceName, eidValue)
+		return err
+	}
+	eidStr = "238A0841D828"
+	// 解码成 6 字节
+	eidBytes, err := hex.DecodeString(eidStr)
+	if err != nil {
+		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
+		return err
+	}
+	if len(eidBytes) != 6 {
+		err = fmt.Errorf("EID 长度不对，期望 6 字节，实际 %d 字节", len(eidBytes))
+		return err
+	}
+	var sensorID [6]byte
+	copy(sensorID[:], eidBytes)
+	// 构建复位帧
+	loc := time.FixedZone("CST", 8*3600)    // 北京时区
+	ts := uint32(time.Now().In(loc).Unix()) // 当前时间转为世纪秒
+
+	// 发送命令
+	eidStr, _ = eidValue.(string)
+	RestCommandBuildFrame(eidStr, sensorID, 1, ts)
+
 	return nil
 }

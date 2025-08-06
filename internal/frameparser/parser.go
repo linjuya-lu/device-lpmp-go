@@ -96,6 +96,11 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				case 4, 5:
 					// 控制报文响应
 					handleFrameCtl(frame_ctl)
+					if config.ResourcesFlag {
+						cb(deviceName, "AsyncReporting", config.Resources1)
+						config.ResourcesFlag = false
+					}
+					continue
 				default:
 					// 其他 packetType 的非分片帧，不处理
 					continue
@@ -127,18 +132,21 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					dataLen = uint32(frame[idx])
 					idx++
 				case 2:
-					dataLen = uint32(binary.BigEndian.Uint16(frame[idx : idx+2]))
+					dataLen = uint32(binary.LittleEndian.Uint16(frame[idx : idx+2]))
 					idx += 2
 				case 3:
 					dataLen = uint32(frame[idx])<<16 | uint32(frame[idx+1])<<8 | uint32(frame[idx+2])
 					idx += 3
 				}
 				// 数据越界校验
-				if idx+int(dataLen) > len(frame)-2 {
-					log.Printf("参数数据越界 SensorID=%s，跳过本帧", sensorID)
-					break
-				}
+				// if idx+int(dataLen) > len(frame)-2 {
+				// 	log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
+				// 	log.Printf("参数数据越界 SensorID=%s，跳过本帧", sensorID)
+				// 	break
+				// }
 				// 提取原始值字节
+				log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
+
 				valBytes := frame[idx : idx+int(dataLen)]
 				idx += int(dataLen)
 				// 解析数据
@@ -149,6 +157,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					} else {
 						// 写入运行时值表
 						config.SetDeviceValue(deviceName, info.Name, val)
+						resources = append(resources, info.Name)
 						log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 					}
 				} else {
@@ -178,8 +187,9 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 //   - Data_Status: 上传状态 0xFF 成功，0x00 失败
 //   - CRC16: 对整帧前 8 字节 CRC16 校验，高低字节附加
 func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
+	var eidStr = "238A0841D828"
 	// 解码 SensorKey：将 12 字符十六进制字符串解析为 6 字节
-	keyBytes, err := hex.DecodeString(sensorKey)
+	keyBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		return errors.New("invalid sensorKey hex: " + err.Error())
 	}

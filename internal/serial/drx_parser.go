@@ -2,11 +2,13 @@ package serial
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"strconv"
 	"strings"
+	"syscall"
 
 	goserial "go.bug.st/serial.v1"
 )
@@ -121,6 +123,9 @@ func StartSerialScanner(port io.Reader) {
 		for {
 			rawLine, err := reader.ReadString('\n')
 			if err != nil {
+				if errors.Is(err, syscall.EINTR) {
+					continue // 被信号中断，重试
+				}
 				if err != io.EOF {
 					log.Printf("串口读取出错: %v", err)
 				}
