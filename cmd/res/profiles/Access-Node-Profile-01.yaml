@@ -1,0 +1,43 @@
+name: "Access-Node-Profile-01"
+manufacturer: "HY"
+model: "Lora-V1.0.0"
+labels:
+  - "edgex-node-prfile"
+description: "汇源接入节点"
+
+deviceResources:
+  - name: "commandTopologyQuery"   # 命令：拓扑查询
+    isHidden: false
+    description: "默认0,置1查询查询拓扑"
+    properties:
+      valueType: "Int8"    
+      readWrite: "W"        
+      units: ""            
+      defaultValue: "0"     
+  - name: "resourceTopologyDiagram"   # 资源：路由信息 <EID> <EID TYPE> <EID STA> <EID PARANT>
+    isHidden: false
+    description: "拓扑内容"
+    properties:
+      valueType: "Object"    
+      readWrite: "R"        
+      units: ""            
+      defaultValue: "{}"     
+  - name: "resourceEid"                # 资源：EID
+    isHidden: false                   
+    description: "EID"
+    properties:
+      valueType: "String"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "238A0841D828"   
+  - name: "resourceState"
+    isHidden: false
+    description: "运行状态(0=在线,1=掉线)"     # 资源：在线状态
+    properties:
+      valueType: "Uint8"
+      readWrite: "R"
+      units: "code"
+      defaultValue: "0" 
+
+
+

@@ -109,10 +109,7 @@ var DrxChan = make(chan []byte, 100)
 // TOP原始行通道（给topology收集器用）
 var TopoChan = make(chan string, 100)
 
-// StartSerialScanner 从 port 里读数据：
-// - 对于以 +DRX: 开头的行，按原逻辑交给 ParseDRXLine/drxChan。
-// - 对于 +TOP: … OK 这一整块，手动拼包后一次性推给 TopoChan。
-// 其他行忽略。
+// AT指令解析
 func StartSerialScanner(port io.Reader) {
 	go func() {
 		reader := bufio.NewReader(port)
@@ -132,22 +129,21 @@ func StartSerialScanner(port io.Reader) {
 				break
 			}
 			line := strings.TrimSpace(rawLine)
-			// —— DRX 逻辑 ——
+			// —— DRX 处理 ——
 			if strings.HasPrefix(line, "+DRX:") {
 				data, err := ParseDRXLine(line)
 				if err == nil {
 					DrxChan <- data
 				}
-				// DRX 行即便也可能带 +TOP:，按你原始逻辑先处理 DRX
 				continue
 			}
-			// —— TOP拼包 ——
+			// —— TOP处理 ——
 			switch {
 			case strings.HasPrefix(line, "+TOP:"):
 				// 收到块头
 				collectingTopo = true
 				topoBuf.Reset()
-				// 取 header 后面可能的第一段 payload
+				// 取 header 后面第一段 payload
 				parts := strings.SplitN(line[len("+TOP:"):], ",", 3)
 				if len(parts) >= 3 {
 					topoBuf.WriteString(parts[2])

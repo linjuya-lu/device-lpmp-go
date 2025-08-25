@@ -8,7 +8,7 @@ import (
 )
 
 // 控制报文类型：传感器 ID 查询/设置（7bit），按协议附录B 定义
-const ctrlTypeSensorID = 0x05 // 假设值为 7，如有具体值请替换
+const ctrlTypeSensorID = 0x05
 
 // BuildSensorIDFrame 构造 “传感器ID 查询/设置” 控制报文。
 // sensorID: 原始 6 字节传感器 ID。

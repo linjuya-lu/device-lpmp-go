@@ -13,21 +13,9 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
-// CallbackFunc 定义当解析完成时的回调签名
-// deviceName: 设备名称
-// sourceName: 上报的源名称，可自定义
-// resourceNames: 已解析的资源名列表
 type CallbackFunc func(deviceName, sourceName string, values map[string]interface{})
 
-// StartParser 从 frameCh 通道中持续读取完整帧，启动一个后台协程进行业务数据解析。
-// 依照《Q/GDW 12184—2021》附录 D 业务报文格式，实现以下功能：
-// 1. 提取 SensorID、报文类型（仅处理业务数据：监测和告警）  控制报文与控制报文响应单独函数处理
-// 2. 根据 DataLen（4bit）、FragInd（1bit）、PacketType（3bit）判断是否处理
-// 3. 分片帧（FragInd=1）开协程处理
-// 4. 按照参量个数逐个解析 ParamType(14bit)+LengthFlag(2bit) + 可选长度字段 + 数据
-// 5. 将数值按表大端转换为 float32/float64/int8等基本类型
-// 6. 针对已知 SensorID（如"238A08262319"水位传感器），调用 config.SetDeviceValue 存储解析结果
-// 7. 异常或格式不符时跳过本帧，确保解析循环不中断
+// 依照《Q/GDW 12184—2021》附录 D 业务报文解析
 func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 	// fmt.Printf("[StartParser] cb=%p\n", cb)
 
@@ -39,18 +27,16 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				log.Println("帧长度不足，跳过解析")
 				continue
 			}
-			// CRC 校验：最后 2 字节为 CRC-16
+			// CRC 校验
 			payload := frame[:len(frame)-2]
 			recvCRC := binary.BigEndian.Uint16(frame[len(frame)-2:])
-			// 读取6字节SensorID，使用Hex字符串表示
+			// 读取6字节SensorID
 			sidBytes := frame[0:6]
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
 			deviceName, hasDevice := config.LookupDeviceName(sensorID)
 			if !hasDevice {
 				log.Printf("SensorIDToDeviceName keys: %#v", config.SensorIDToDeviceName)
-
 				log.Printf(">>[%s]<<", sensorID)
-
 				log.Printf("未知11 SensorID=%s，跳过本帧", sensorID)
 				continue
 			}
@@ -140,12 +126,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					dataLen = uint32(frame[idx])<<16 | uint32(frame[idx+1])<<8 | uint32(frame[idx+2])
 					idx += 3
 				}
-				// 数据越界校验
-				// if idx+int(dataLen) > len(frame)-2 {
-				// 	log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
-				// 	log.Printf("参数数据越界 SensorID=%s，跳过本帧", sensorID)
-				// 	break
-				// }
+
 				// 提取原始值字节
 				log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
 
@@ -169,37 +150,21 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			}
 			log.Printf("[DEBUG] parsed=%d dataCount=%d len(resourceValues)=%d cb=%v",
 				parsed, dataCount, len(resourceValues), cb != nil)
-			// if parsed < dataCount {
-			// 	log.Printf("[WARN] 只解析了 %d/%d 个参数，仍然执行回调", parsed, dataCount)
-			// }
 
 			// 解析完成，调用回调
 			fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
 
 			if cb != nil && len(resourceValues) > 0 {
-				fmt.Printf("11111111112222222222222")
 				cb(deviceName, "AsyncReporting", resourceValues)
 			}
-			// 若未完全解析，跳过后续逻辑
-			if parsed < dataCount {
-				continue
-			}
+
 		}
 	}()
 }
 
-// SendDataStatus 构造并发送“监测数据响应”报文
-// 协议格式: [SensorID(6)][Header(1)][Data_Status(1)][CRC16(2)]
-//   - SensorID: 6 字节原始 ID，传入时应该是 12 字符的十六进制字符串
-//   - Header:
-//     高4位：DataLen (参数个数)
-//     第3位：FragInd (0=未分片)
-//     低3位：PacketType (0b001=监测数据响应)
-//   - Data_Status: 上传状态 0xFF 成功，0x00 失败
-//   - CRC16: 对整帧前 8 字节 CRC16 校验，高低字节附加
+// 发送监测数据响应报文
 func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
 	var eidStr = "238A0841D828"
-	// 解码 SensorKey：将 12 字符十六进制字符串解析为 6 字节
 	keyBytes, err := hex.DecodeString(eidStr)
 	if err != nil {
 		return errors.New("invalid sensorKey hex: " + err.Error())
@@ -215,7 +180,7 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	packet = append(packet, keyBytes...)
 	packet = append(packet, header)
 	packet = append(packet, dataStatus)
-	//计算并追加 CRC16
+	//追加 CRC16
 	crc := CRC16(packet)
 	packet = append(packet, byte(crc>>8), byte(crc&0xFF))
 	//发送
@@ -224,7 +189,6 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 }
 
 func onDataReceived(deviceName string) {
-	// 比如我们要把当前时间戳（纳秒）写入 lastDataTimestamp 这个资源
 	ts := time.Now().UnixNano()
-	config.SetDeviceValue(deviceName, "lastDataTimestamp", ts)
+	config.SetDeviceValue(deviceName, "resourceLastDataTimestamp", ts)
 }

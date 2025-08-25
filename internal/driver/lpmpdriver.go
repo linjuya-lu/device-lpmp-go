@@ -44,29 +44,27 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *LpMpDriver) Start() error {
-	// 配置文件和串口参数
+	// 参数
 	devicesYAML := "../cmd/res/devices/devices.yaml"
 	profilesDir := "../cmd/res/profiles"
 	portName := "/dev/ttyUSB0"
 	baudRate := 115200
 
-	// 初始化资源
+	// 初始化
 	if err := config.InitDeviceResources(devicesYAML, profilesDir); err != nil {
 		return fmt.Errorf("初始化设备资源失败: %w", err)
 	}
-	// 串口初始
 	serialPort, err := serial.Open(portName, baudRate)
 	if err != nil {
 		return fmt.Errorf("打开串口 %s 失败: %w", portName, err)
 	}
-	// AT+DRX 监听，二进制帧推到 frameCh
-	// frameCh := make(chan []byte, 100)
+	// AT指令解析
 	serial.StartSerialScanner(serialPort)
-	// 解析协程
+	// 业务协议解析
 	frameparser.StartParser(serial.DrxChan, d.AsyncReporting)
-	//写协程
+	//命令下发
 	serial.StartWriteWorker(serialPort)
-	//分片解析协程
+	//波形/图像数据解析
 	go func() {
 		if err := frameparser.ShardingParser(frameparser.SDUCh); err != nil {
 			d.lc.Error("ShardingParser 异常退出: %v", err)
@@ -76,7 +74,6 @@ func (d *LpMpDriver) Start() error {
 	serial.StartTopoProcessor(serial.TopoChan)
 	//做EID和设备名的初步映射
 	config.UpdateSensorMapping()
-	// d.simulateAsyncReporting() //模拟异步上传
 	startHealthCheckLoop() //状态控制函数
 	d.lc.Infof("串口监听和解析已启动")
 	return nil
@@ -93,14 +90,13 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 	}
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
-		// 如果是路由信息，取数据，序列化
-		if resName == "topologyDiagram" {
-			topo := serial.GetTopoList() // []config.NodeTopology
+		// 路由信息
+		if resName == "resourceTopologyDiagram" {
+			topo := serial.GetTopoList()
 			fmt.Printf("topo:%s", topo)
-			// 序列化成 CommandValue
 			cv, cerr := dsModels.NewCommandValue(
 				resName,
-				common.ValueTypeObject, //  Object 类型
+				common.ValueTypeObject,
 				topo,
 			)
 			if cerr != nil {
@@ -109,7 +105,7 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			res = append(res, cv)
 			continue
 		}
-		// 一般资源从 config 读取
+		// 一般资源
 		val, exists := values[resName]
 		if !exists {
 			return nil, fmt.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
@@ -137,53 +133,34 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 	for i, req := range reqs {
 		resName := req.DeviceResourceName
 		cv := params[i]
-		// 命令类型转换
 		v, _ := cv.Int8Value()
-		d.lc.Infof("Int8Value = %d", v)
-		// 如果是时间参数查询且值为 1
-		if resName == "Time_Parameter_Query" && v == 1 {
+		// d.lc.Infof("Int8Value = %d", v)
+		// 时间参数查询且值为 1
+		if resName == "commandTimeParameterQuery" && v == 1 {
 			if err := d.handleTimeParameterQuery(deviceName); err != nil {
 				return err
 			}
 		}
-		// 如果是时间参数设置且值为 1
-		if resName == "Time_Parameter_Set" && v == 1 {
+		// 时间参数设置且值为 1
+		if resName == "commandTimeParameterSet" && v == 1 {
 			if err := d.handleTimeParameterSet(deviceName); err != nil {
 				return err
 			}
 		}
-		// 如果是复位命令且值为 1
-		if resName == "Reset_Set" && v == 1 {
+		// 复位命令且值为 1
+		if resName == "commandResetSet" && v == 1 {
 			if err := d.handleResetCommand(deviceName); err != nil {
 				return err
 			}
 		}
-		// 如果是ID查询命令且值为 1
-		if resName == "ID_Query" && v == 1 {
-			if err := d.handleIdQuery(deviceName); err != nil {
-				return err
-			}
-		}
-		// 如果是所有通用参数查询命令且值为 1
-		if resName == "General_Parameter_Query" && v == 1 {
-			if err := d.handleGeneParaQuery(deviceName); err != nil {
-				return err
-			}
-		}
-		// 如果是所有告警数据查询命令且值为 1
-		if resName == "Alarm_Parameter_Query" && v == 1 {
-			if err := d.handleIdAlarmParaQuery(deviceName); err != nil {
-				return err
-			}
-		}
-		// 如果是所有检测参数查询命令且值为 1
-		if resName == "Monitoring_Data_Query" && v == 1 {
+		// 检测数据查询且值为 1
+		if resName == "commandMonitoringDataQuery" && v == 1 {
 			if err := d.handleIdMoniDataQuery(deviceName); err != nil {
 				return err
 			}
 		}
-		// 如果是网络拓扑查询命令且值为 1
-		if resName == "Router_Parameter_Query" && v == 1 {
+		// 拓扑查询命令且值为 1
+		if resName == "commandTopologyQuery" && v == 1 {
 			serial.SendTopoQuery(0, 10)
 		}
 	}
@@ -279,7 +256,7 @@ func (d *LpMpDriver) Discover() error {
 	return fmt.Errorf("driver's Discover function isn't implemented")
 }
 
-// coerceTo 把任意 val 转换为与 EdgeX ValueType 匹配的 Go 具体类型。
+// val 转换为与 EdgeX ValueType 匹配的具体类型
 func coerceTo(val any, valueType string) (any, error) {
 	switch valueType {
 
@@ -393,7 +370,7 @@ func coerceTo(val any, valueType string) (any, error) {
 		case []byte:
 			return x, nil
 		case string:
-			// 允许 hex 字符串（可按需删掉）
+			// 允许 hex 字符串
 			b, err := hex.DecodeString(x)
 			if err != nil {
 				return nil, fmt.Errorf("parse %q as hex []byte: %w", x, err)

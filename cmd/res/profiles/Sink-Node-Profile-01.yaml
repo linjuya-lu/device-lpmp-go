@@ -1,0 +1,211 @@
+name: "Sink-Node-Profile-01"
+manufacturer: "HY"
+model: "Lora-V1.0.0"
+labels:
+  - "sinke-node-profile"
+description: "汇源汇聚节点"
+
+deviceResources: 
+  - name: "resourceEid"                # 资源：EID
+    isHidden: false                   
+    description: "EID"
+    properties:
+      valueType: "String"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "238A08411011"    
+  - name: "resourceBatteryVoltage"                
+    isHidden: true                   
+    description: "汇聚节点工作电压"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "V"                      
+      defaultValue: "0"    
+  - name: "resourceElectricCurrent"                
+    isHidden: true                   
+    description: "汇聚节点工作电流"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "A"                      
+      defaultValue: "0"    
+  - name: "resourceTemperature00"                
+    isHidden: true                   
+    description: "汇聚节点工作温度"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "℃"                      
+      defaultValue: "0"   
+  - name: "resource10minAvgWindSpeed"                
+    isHidden: true                   
+    description: "微气象平均风速"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "m/s"                      
+      defaultValue: "0"   
+  - name: "resource10minAvgWindDirection"                
+    isHidden: true                   
+    description: "微气象平均风向"
+    properties:
+      valueType: "Int16"            
+      readWrite: "R"                 
+      units: "°"                      
+      defaultValue: "0"   
+  - name: "resourceMaxWindSpeed"                
+    isHidden: true                   
+    description: "微气象最大风速"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "m/s"                      
+      defaultValue: "0"   
+  - name: "resourceTemperature01"                
+    isHidden: true                   
+    description: "微气象环境温度"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "°C"                      
+      defaultValue: "0"   
+  - name: "resourceHumidity"                
+    isHidden: true                   
+    description: "微气象环境湿度"
+    properties:
+      valueType: "Uint16"            
+      readWrite: "R"                 
+      units: "%RH"                      
+      defaultValue: "0"   
+  - name: "resourcePressure"                
+    isHidden: true                  
+    description: "微气象大气气压"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "hPa"                      
+      defaultValue: "0"   
+  - name: "resourceRainfall10min"                
+    isHidden: true                   
+    description: "微气象雨量"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: "mm"                      
+      defaultValue: "0"   
+  - name: "resourceSolarRadiation"                
+    isHidden: true                   
+    description: "微气象光照强度"
+    properties:
+      valueType: "Uint16"            
+      readWrite: "R"                 
+      units: "W/m2"                      
+      defaultValue: "0"   
+  - name: "resourceLastDataTimestamp"                       # 数据时间戳
+    isHidden: true
+    description: "数据时间戳(Unix 纳秒）"
+    properties:
+      valueType: "Int64"                            
+      readWrite: "R"                                
+      units: "ns"
+      defaultValue: "0"
+  - name: "resourceState"
+    isHidden: false
+    description: "运行状态(0=在线,1=掉线)"
+    properties:
+      valueType: "Uint8"
+      readWrite: "R"
+      units: "code"
+      defaultValue: "0"
+  - name: "resourcePeriod"
+    isHidden: false
+    description: "上报周期（秒）"
+    properties:
+      valueType: "Uint16"  
+      readWrite: "R"
+      units: "s"
+      defaultValue: "60"
+  - name: "resourceReporting"
+    isHidden: true
+    description: "资源周期上传"
+    properties:
+      valueType: "Uint16"  
+      readWrite: "R"
+      units: ""
+      defaultValue: "0"
+  - name: "resourceHeartbeat"
+    isHidden: true
+    description: "心跳"
+    properties:
+      valueType: "Uint16"  
+      readWrite: "R"
+      units: ""
+      defaultValue: "0"
+  - name: "resourceTimeStampSetResult"               
+    isHidden: false                   
+    description: "时间设置命令响应"
+    properties:
+      valueType: "String"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "" 
+  - name: "resourceTimeStampQueryResult"               
+    isHidden: false                   
+    description: "时间设置命令响应"
+    properties:
+      valueType: "String"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "" 
+  - name: "commandTimeParameterQuery"  # 时间参数查询
+    isHidden: false
+    description: "0未开启 1查询汇聚节点时间"
+    properties:
+      valueType: "Int8"    
+      readWrite: "W"       
+      units: ""
+      defaultValue: "0"  
+  - name: "commandTimeParameterSet"  # 时间参数设置
+    isHidden: false
+    description: "0未开启 1设置汇聚节点时间"
+    properties:
+      valueType: "Int8"    
+      readWrite: "W"       
+      units: ""
+      defaultValue: "0"      
+  - name: "commandResetSet"  # 汇聚节点复位
+    isHidden: false
+    description: "0未开启 1复位汇聚节点"
+    properties:
+      valueType: "Int8"    
+      readWrite: "W"       
+      units: ""
+      defaultValue: "0"   
+  - name: "commandMonitoringDataQuery"  # 监测数据查询
+    isHidden: false
+    description: "0未开启 1查询全部监测数据"
+    properties:
+      valueType: "Int8"    
+      readWrite: "W"       
+      units: ""
+      defaultValue: "0"    
+deviceCommands:
+  -
+     name: "resourceSinkNode"
+     readWrite: "R"
+     isHidden: false
+     resourceOperations:
+       - { deviceResource: "resourceEid", defaultValue: "238A08411011" }
+       - { deviceResource: "resourceBatteryVoltage", defaultValue: "0" }
+       - { deviceResource: "resourceElectricCurrent", defaultValue: "0" }
+       - { deviceResource: "resourceTemperature00", defaultValue: "0" }
+       - { deviceResource: "resource10minAvgWindSpeed", defaultValue: "0" }
+       - { deviceResource: "resource10minAvgWindDirection", defaultValue: "0" }
+       - { deviceResource: "resourceMaxWindSpeed", defaultValue: "0" }
+       - { deviceResource: "resourceTemperature01", defaultValue: "0" }
+       - { deviceResource: "resourceHumidity", defaultValue: "0" }
+       - { deviceResource: "resourcePressure", defaultValue: "0" }
+       - { deviceResource: "resourceRainfall10min", defaultValue: "0" }
+       - { deviceResource: "resourceSolarRadiation", defaultValue: "0" }
+       - { deviceResource: "resourceState", defaultValue: "0" }

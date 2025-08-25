@@ -1,18 +1,18 @@
 deviceList:
-  - name: "Edge-Node"
-    profileName: "Edge-Proxy-Profile"
-    description: "边缘接入节点"
+  - name: "Access-Node-01"
+    profileName: "Access-Node-Profile-01"
+    description: "汇源接入节点"
     labels:
-      - edge-node
+      - access-node-device
     protocols:
       custom:
         location: /dev/ttyUSB0
         baudRate: "115200"
-  - name: "Sink-Node1"
-    profileName: "Sink-Node-Profile1"
+  - name: "Sink-Node-01"
+    profileName: "Sink-Node-Profile-01"
     description: "汇源汇聚节点"
     labels:
-      - sinke-node
+      - sinke-node-device
     protocols:
       custom:
         location: /dev/ttyUSB0

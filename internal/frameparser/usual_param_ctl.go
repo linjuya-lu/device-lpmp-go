@@ -17,15 +17,7 @@ const (
 	maxParams = 16
 )
 
-// BuildGeneralParamFrame 构造“通用参数查询/设置”报文。
-//
-//	sensorID:        6 字节传感器 ID
-//	requestSetFlag:  0 = 查询所有参数（此时 paramsMap 应传 nil 或 empty，DataLen=0xF 且无 ParameterList）
-//	                 1 = 按 paramsOrder & paramsMap 中指定的参数组合 ParameterList
-//	paramsOrder:     设 requestSetFlag=1 时，按此顺序列出要查询/设置的参数名
-//	paramsMap:       map[参数名]→[]byte（对应参数的数据内容）
-//
-// 返回：完整帧字节切片（含 CRC16）
+// BuildGeneralParamFrame 构造“通用参数查询/设置”报文
 func BuildGeneralParamFrame(sensorID [6]byte, requestSetFlag byte, paramsOrder []string, paramsMap map[string][]byte) ([]byte, error) {
 	// 确定 DataLen 和 ParameterList
 	var dataLen byte
