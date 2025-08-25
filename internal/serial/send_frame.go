@@ -49,12 +49,3 @@ func SendFrame(dstAddr string, payload []byte) {
 	// 发送
 	config.WriteChan <- []byte(cmd)
 }
-
-// 初始化时使用示例：
-//
-//     // 启动写协程
-//     StartWriteWorker(port)
-//
-//     // 关闭通道
-//     close(writeChan)
-//

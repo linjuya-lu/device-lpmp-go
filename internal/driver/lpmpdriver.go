@@ -1,7 +1,10 @@
 package driver
 
 import (
+	"encoding/hex"
 	"fmt"
+	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -83,15 +86,15 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 	d.locker.Lock()
 	defer d.locker.Unlock()
 	d.lc.Infof("HandleReadCommands 调用: 设备=%s, 请求资源数=%d", deviceName, len(reqs))
-	// 取缓存
+
 	values, ok := config.GetDeviceValues(deviceName)
 	if !ok {
 		return nil, fmt.Errorf("设备 %s 未找到或无可用值", deviceName)
 	}
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
-		// 1) 如果是路由信息，直接从全局 topoList 取数据，并 JSON 序列化
-		if resName == "Routing_Information" {
+		// 如果是路由信息，取数据，序列化
+		if resName == "topologyDiagram" {
 			topo := serial.GetTopoList() // []config.NodeTopology
 			fmt.Printf("topo:%s", topo)
 			// 序列化成 CommandValue
@@ -106,17 +109,14 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			res = append(res, cv)
 			continue
 		}
-		// 2) 静态资源从 config 缓存读取
+		// 一般资源从 config 读取
 		val, exists := values[resName]
 		if !exists {
 			return nil, fmt.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
 		}
-		cv := &dsModels.CommandValue{
-			DeviceResourceName: resName,
-			Type:               req.Type,
-			Value:              val,
-			Origin:             time.Now().UnixNano(),
-			Tags:               map[string]string{},
+		cv, err := makeCV(resName, req.Type, val)
+		if err != nil {
+			return nil, err
 		}
 		d.lc.Infof("读取值: %s.%s = %v", deviceName, resName, val)
 		res = append(res, cv)
@@ -277,4 +277,234 @@ func (d *LpMpDriver) ValidateDevice(device models.Device) error {
 }
 func (d *LpMpDriver) Discover() error {
 	return fmt.Errorf("driver's Discover function isn't implemented")
+}
+
+// coerceTo 把任意 val 转换为与 EdgeX ValueType 匹配的 Go 具体类型。
+func coerceTo(val any, valueType string) (any, error) {
+	switch valueType {
+
+	case common.ValueTypeBool:
+		switch x := val.(type) {
+		case bool:
+			return x, nil
+		case string:
+			b, err := strconv.ParseBool(x)
+			if err != nil {
+				return nil, fmt.Errorf("parse %q as bool: %w", x, err)
+			}
+			return b, nil
+		case float64:
+			return x != 0, nil
+		case int, int32, int64, uint, uint32, uint64:
+			return fmt.Sprint(x) != "0", nil
+		}
+
+	case common.ValueTypeInt8:
+		if v, ok := toInt64(val); ok {
+			if v < math.MinInt8 || v > math.MaxInt8 {
+				return nil, fmt.Errorf("overflow: %v not in int8 range", v)
+			}
+			return int8(v), nil
+		}
+		return nil, typeErr(val, "int8")
+
+	case common.ValueTypeInt16:
+		if v, ok := toInt64(val); ok {
+			if v < math.MinInt16 || v > math.MaxInt16 {
+				return nil, fmt.Errorf("overflow: %v not in int16 range", v)
+			}
+			return int16(v), nil
+		}
+		return nil, typeErr(val, "int16")
+
+	case common.ValueTypeInt32:
+		if v, ok := toInt64(val); ok {
+			if v < math.MinInt32 || v > math.MaxInt32 {
+				return nil, fmt.Errorf("overflow: %v not in int32 range", v)
+			}
+			return int32(v), nil
+		}
+		return nil, typeErr(val, "int32")
+
+	case common.ValueTypeInt64:
+		if v, ok := toInt64(val); ok {
+			return v, nil
+		}
+		return nil, typeErr(val, "int64")
+
+	case common.ValueTypeUint8:
+		if v, ok := toUint64(val); ok {
+			if v > math.MaxUint8 {
+				return nil, fmt.Errorf("overflow: %v not in uint8 range", v)
+			}
+			return uint8(v), nil
+		}
+		return nil, typeErr(val, "uint8")
+
+	case common.ValueTypeUint16:
+		if v, ok := toUint64(val); ok {
+			if v > math.MaxUint16 {
+				return nil, fmt.Errorf("overflow: %v not in uint16 range", v)
+			}
+			return uint16(v), nil
+		}
+		return nil, typeErr(val, "uint16")
+
+	case common.ValueTypeUint32:
+		if v, ok := toUint64(val); ok {
+			if v > math.MaxUint32 {
+				return nil, fmt.Errorf("overflow: %v not in uint32 range", v)
+			}
+			return uint32(v), nil
+		}
+		return nil, typeErr(val, "uint32")
+
+	case common.ValueTypeUint64:
+		if v, ok := toUint64(val); ok {
+			return v, nil
+		}
+		return nil, typeErr(val, "uint64")
+
+	case common.ValueTypeFloat32:
+		if f, ok := toFloat64(val); ok {
+			if f < -math.MaxFloat32 || f > math.MaxFloat32 {
+				return nil, fmt.Errorf("overflow: %v not in float32 range", f)
+			}
+			return float32(f), nil
+		}
+		return nil, typeErr(val, "float32")
+
+	case common.ValueTypeFloat64:
+		if f, ok := toFloat64(val); ok {
+			return f, nil
+		}
+		return nil, typeErr(val, "float64")
+
+	case common.ValueTypeString:
+		switch x := val.(type) {
+		case string:
+			return x, nil
+		default:
+			return fmt.Sprint(x), nil
+		}
+
+	case common.ValueTypeBinary:
+		switch x := val.(type) {
+		case []byte:
+			return x, nil
+		case string:
+			// 允许 hex 字符串（可按需删掉）
+			b, err := hex.DecodeString(x)
+			if err != nil {
+				return nil, fmt.Errorf("parse %q as hex []byte: %w", x, err)
+			}
+			return b, nil
+		}
+		return nil, typeErr(val, "[]byte")
+	}
+
+	return nil, fmt.Errorf("unsupported ValueType %q", valueType)
+}
+
+func typeErr(v any, want string) error {
+	return fmt.Errorf("type %T not compatible with %s", v, want)
+}
+
+// 帮助：把 any 转成 int64 / uint64 / float64（支持 string / JSON 反序列化常见类型）
+func toInt64(v any) (int64, bool) {
+	switch x := v.(type) {
+	case int:
+		return int64(x), true
+	case int8:
+		return int64(x), true
+	case int16:
+		return int64(x), true
+	case int32:
+		return int64(x), true
+	case int64:
+		return x, true
+	case uint8:
+		return int64(x), true
+	case uint16:
+		return int64(x), true
+	case uint32:
+		return int64(x), true
+	case uint:
+		return int64(x), true
+	case float64:
+		return int64(x), true
+	case float32:
+		return int64(x), true
+	case string:
+		if i, err := strconv.ParseInt(x, 10, 64); err == nil {
+			return i, true
+		}
+		if u, err := strconv.ParseUint(x, 10, 64); err == nil {
+			return int64(u), true
+		}
+	}
+	return 0, false
+}
+func toUint64(v any) (uint64, bool) {
+	switch x := v.(type) {
+	case uint8:
+		return uint64(x), true
+	case uint16:
+		return uint64(x), true
+	case uint32:
+		return uint64(x), true
+	case uint64:
+		return x, true
+	case uint:
+		return uint64(x), true
+	case int, int8, int16, int32, int64:
+		i, _ := toInt64(x)
+		if i >= 0 {
+			return uint64(i), true
+		}
+	case float64:
+		if x >= 0 {
+			return uint64(x), true
+		}
+	case float32:
+		if x >= 0 {
+			return uint64(x), true
+		}
+	case string:
+		if u, err := strconv.ParseUint(x, 10, 64); err == nil {
+			return u, true
+		}
+	}
+	return 0, false
+}
+func toFloat64(v any) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int, int8, int16, int32, int64:
+		i, _ := toInt64(x)
+		return float64(i), true
+	case uint, uint8, uint16, uint32, uint64:
+		u, _ := toUint64(x)
+		return float64(u), true
+	case string:
+		if f, err := strconv.ParseFloat(x, 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
+}
+func makeCV(name string, valueType string, val any) (*dsModels.CommandValue, error) {
+	cval, err := coerceTo(val, valueType)
+	if err != nil {
+		return nil, fmt.Errorf("coerce %s to %s failed: %w", name, valueType, err)
+	}
+	cv, err := dsModels.NewCommandValue(name, valueType, cval)
+	if err != nil {
+		return nil, err
+	}
+	cv.Origin = time.Now().UnixNano()
+	return cv, nil
 }

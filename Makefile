@@ -14,7 +14,7 @@ ARCH=$(shell uname -m)
 DOCKERS=docker_device_lpmp_go
 .PHONY: $(DOCKERS)
 
-VERSION=$(shell cat ./VERSION 2>/dev/null || echo 0.0.0)
+VERSION := 1.0.0
 GIT_SHA=$(shell git rev-parse HEAD)
 SDKVERSION=$(shell cat ./go.mod | grep 'github.com/edgexfoundry/device-sdk-go/v4 v' | sed 's/require//g' | awk '{print $$2}')
 
@@ -71,8 +71,7 @@ docker_device_lpmp_go:
 	docker build \
 		--build-arg ADD_BUILD_TAGS=$(ADD_BUILD_TAGS) \
 		--label "git_sha=$(GIT_SHA)" \
-		-t edgexfoundry/device-virtual:$(GIT_SHA) \
-		-t edgexfoundry/device-virtual:$(VERSION)-dev \
+		-t edgexfoundry/device-lpmp:$(VERSION) \
 		.
 
 docker-nats:

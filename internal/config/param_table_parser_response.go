@@ -19,7 +19,7 @@ type Frame struct {
 	Check      uint16 // 校验位，2 字节 CRC
 }
 
-// Bytes 按你的协议格式把 Frame 转成 []byte
+// Bytes 把 Frame 转成 []byte
 func (f *Frame) Bytes() []byte {
 	buf := make([]byte, 0, 6+1+1+1+len(f.Payload)+2)
 	buf = append(buf, f.SensorID[:]...)

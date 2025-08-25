@@ -3,7 +3,7 @@ Writable:
   LogLevel: INFO
 
 Service:
-  Host: localhost
+  Host: 0.0.0.0
   Port: 59908
   StartupMsg: device lpmp started
 

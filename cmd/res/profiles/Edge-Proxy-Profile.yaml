@@ -15,7 +15,7 @@ deviceResources:
       units: ""            
       defaultValue: "0"     
   - name: "Routing_Information"   # 路由信息 <EID> <EID TYPE> <EID STA> <EID PARANT>
-    isHidden: true
+    isHidden: false
     description: "任意 JSON 对象"
     properties:
       valueType: "Object"    
@@ -29,7 +29,7 @@ deviceResources:
       valueType: "String"            
       readWrite: "R"                 
       units: ""                      
-      defaultValue: "238A08262316"    
+      defaultValue: "238A0841D828"    
 deviceCommands:
   -
     name: "Command_Router_Parameter_Query"

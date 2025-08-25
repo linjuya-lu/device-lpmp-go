@@ -29,7 +29,7 @@ type CallbackFunc func(deviceName, sourceName string, values map[string]interfac
 // 6. 针对已知 SensorID（如"238A08262319"水位传感器），调用 config.SetDeviceValue 存储解析结果
 // 7. 异常或格式不符时跳过本帧，确保解析循环不中断
 func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
-	fmt.Printf("[StartParser] cb=%p\n", cb)
+	// fmt.Printf("[StartParser] cb=%p\n", cb)
 
 	go func() {
 		for frame := range frameCh {
