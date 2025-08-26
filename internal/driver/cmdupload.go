@@ -5,6 +5,7 @@ import (
 
 	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
+	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
 
 func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values map[string]interface{}) {
@@ -25,10 +26,22 @@ func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values
 		var err error
 
 		switch v := val.(type) {
+		case int8:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt8, v)
+		case uint8:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint8, v)
+		case int16:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt16, v)
+		case uint16:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint16, v)
 		case int32:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt32, v)
+		case uint32:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint32, v)
 		case int64:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt64, v)
+		case uint64:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint64, v)
 		case float32:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeFloat32, v)
 		case float64:
@@ -65,4 +78,31 @@ func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values
 
 	d.lc.Infof("AsyncValues pushed: device=%s source=%s count=%d",
 		deviceName, sourceName, len(cvs))
+}
+
+// 每60秒遍历一次 ValuesMap
+func (d *LpMpDriver) StartAsyncReporter() {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			config.Mu.RLock()
+			for deviceName, resMap := range config.ValuesMap {
+				if resMap == nil {
+					continue
+				}
+
+				stateVal, ok := resMap["resourceState"]
+				if !ok {
+					continue
+				}
+				values := map[string]interface{}{
+					"resourceState": stateVal,
+				}
+				d.AsyncReporting(deviceName, "resourceHeartbeat", values)
+			}
+			config.Mu.RUnlock()
+		}
+	}()
 }

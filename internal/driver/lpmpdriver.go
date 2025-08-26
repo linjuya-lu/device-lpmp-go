@@ -49,7 +49,6 @@ func (d *LpMpDriver) Start() error {
 	profilesDir := "../cmd/res/profiles"
 	portName := "/dev/ttyUSB0"
 	baudRate := 115200
-
 	// 初始化
 	if err := config.InitDeviceResources(devicesYAML, profilesDir); err != nil {
 		return fmt.Errorf("初始化设备资源失败: %w", err)
@@ -70,12 +69,15 @@ func (d *LpMpDriver) Start() error {
 			d.lc.Error("ShardingParser 异常退出: %v", err)
 		}
 	}()
-	// 启动 topology 处理器，不要赋值给任何变量
+	//拓扑处理器
 	serial.StartTopoProcessor(serial.TopoChan)
+	//心跳上传
+	d.StartAsyncReporter()
 	//做EID和设备名的初步映射
 	config.UpdateSensorMapping()
 	startHealthCheckLoop() //状态控制函数
-	d.lc.Infof("串口监听和解析已启动")
+	InitDevice()
+	d.lc.Infof("lpmp设备服务已启动")
 	return nil
 }
 
@@ -92,6 +94,10 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 		resName := req.DeviceResourceName
 		// 路由信息
 		if resName == "resourceTopologyDiagram" {
+
+			serial.SendTopoQuery(0, 10)
+			//500ms
+			time.Sleep(500 * time.Millisecond)
 			topo := serial.GetTopoList()
 			fmt.Printf("topo:%s", topo)
 			cv, cerr := dsModels.NewCommandValue(

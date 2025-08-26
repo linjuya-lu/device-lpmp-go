@@ -85,7 +85,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					// 控制报文响应
 					handleFrameCtl(frame_ctl)
 					if config.ResourcesFlag {
-						cb(deviceName, "AsyncReporting", config.Resources1)
+						cb(deviceName, "resourceReporting", config.Resources1)
 						config.ResourcesFlag = false
 					}
 					continue

@@ -62,7 +62,7 @@ func UpdateSensorMapping() {
 	SensorIDToDeviceName = make(map[string]string)
 
 	for deviceName, resourceMap := range ValuesMap {
-		raw, exists := resourceMap["eid"]
+		raw, exists := resourceMap["resourceEid"]
 		if !exists {
 			continue
 		}

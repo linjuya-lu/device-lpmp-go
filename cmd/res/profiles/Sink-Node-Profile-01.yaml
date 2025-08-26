@@ -103,7 +103,7 @@ deviceResources:
       units: "W/m2"                      
       defaultValue: "0"   
   - name: "resourceLastDataTimestamp"                       # 数据时间戳
-    isHidden: true
+    isHidden: false
     description: "数据时间戳(Unix 纳秒）"
     properties:
       valueType: "Int64"                            
@@ -112,7 +112,7 @@ deviceResources:
       defaultValue: "0"
   - name: "resourceState"
     isHidden: false
-    description: "运行状态(0=在线,1=掉线)"
+    description: "运行状态(0=掉线,1=在线)"
     properties:
       valueType: "Uint8"
       readWrite: "R"
@@ -125,7 +125,7 @@ deviceResources:
       valueType: "Uint16"  
       readWrite: "R"
       units: "s"
-      defaultValue: "60"
+      defaultValue: "30"
   - name: "resourceReporting"
     isHidden: true
     description: "资源周期上传"

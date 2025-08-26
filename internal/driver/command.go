@@ -18,7 +18,7 @@ import (
 func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 	d.lc.Infof("开始处理时间设置命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())
@@ -62,7 +62,7 @@ func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())
@@ -102,7 +102,7 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())
@@ -141,7 +141,7 @@ func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
 func (d *LpMpDriver) handleIdQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())
@@ -183,7 +183,7 @@ func (d *LpMpDriver) handleIdQuery(deviceName string) error {
 func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())
@@ -225,7 +225,7 @@ func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 func (d *LpMpDriver) handleIdAlarmParaQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())
@@ -267,7 +267,7 @@ func (d *LpMpDriver) handleIdAlarmParaQuery(deviceName string) error {
 func (d *LpMpDriver) handleGeneParaQuery(deviceName string) error {
 	d.lc.Infof("开始处理复位命令: %s", deviceName)
 	// 获取设备的 EID 字符串
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
+	eidValue, ok := config.GetDeviceValue(deviceName, "resourceEid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		d.lc.Error(err.Error())

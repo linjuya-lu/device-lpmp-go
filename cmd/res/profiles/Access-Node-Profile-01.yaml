@@ -32,12 +32,19 @@ deviceResources:
       defaultValue: "238A0841D828"   
   - name: "resourceState"
     isHidden: false
-    description: "运行状态(0=在线,1=掉线)"     # 资源：在线状态
+    description: "运行状态(0=掉线,1=在线)"     # 资源：在线状态
     properties:
       valueType: "Uint8"
       readWrite: "R"
       units: "code"
       defaultValue: "0" 
-
+  - name: "resourceHeartbeat"
+    isHidden: true
+    description: "心跳"
+    properties:
+      valueType: "Uint16"  
+      readWrite: "R"
+      units: ""
+      defaultValue: "0"
 
 
