@@ -83,30 +83,10 @@ func (r *DRXReader) ReadFrame() ([]byte, error) {
 	return nil, io.EOF
 }
 
-// StartDRXListener 启动一个 goroutine，从 io.Reader 读取 AT+DRX 响应帧，
-// 并将解码后的二进制帧推送到 frameCh。
-func StartDRXListener(port io.Reader, frameCh chan<- []byte) {
-	go func() {
-		r := NewDRXReader(port)
-		for {
-			frame, err := r.ReadFrame()
-			if err != nil {
-				if err == io.EOF {
-					close(frameCh)
-					return
-				}
-				// 解析错误或临时错误，跳过本次
-				continue
-			}
-			frameCh <- frame
-		}
-	}()
-}
-
 // DRX数据通道
 var DrxChan = make(chan []byte, 100)
 
-// TOP原始行通道（给topology收集器用）
+// TOP原始行通道
 var TopoChan = make(chan string, 100)
 
 // AT指令解析
