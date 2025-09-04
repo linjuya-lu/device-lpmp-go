@@ -51,38 +51,6 @@ func ParseDRXLine(line string) ([]byte, error) {
 	return buf, nil
 }
 
-// DRXReader 从 io.Reader 按行读取串口输出，过滤 +DRX 响应，
-// 并将 payload 解码后通过 ReadFrame 返回。
-// ReadFrame 会阻塞直到读取到下一条完整 DRX 行或遇到 io.EOF / 错误。
-type DRXReader struct {
-	s *bufio.Scanner
-}
-
-// 创建一个 DRXReader
-func NewDRXReader(r io.Reader) *DRXReader {
-	return &DRXReader{s: bufio.NewScanner(r)}
-}
-
-// ReadFrame 读取 DRX 响应，返回解码后的字节切片
-func (r *DRXReader) ReadFrame() ([]byte, error) {
-	for r.s.Scan() {
-		line := r.s.Text()
-		if !strings.HasPrefix(line, "+DRX:") {
-			continue
-		}
-		data, err := ParseDRXLine(line)
-		if err != nil {
-			// 出错也跳过本行，继续读取下一行
-			continue
-		}
-		return data, nil
-	}
-	if err := r.s.Err(); err != nil {
-		return nil, err
-	}
-	return nil, io.EOF
-}
-
 // DRX数据通道
 var DrxChan = make(chan []byte, 100)
 
