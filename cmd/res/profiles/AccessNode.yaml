@@ -1,46 +1,45 @@
-name: "Access-Node-Profile-01"
-manufacturer: "HY"
-model: "Lora-V1.0.0"
-labels:
-  - "edgex-node-prfile"
-description: "汇源接入节点"
+name: "AccessNode"
+manufacturer: "四川汇源"
+model: "HYJR-20250731"
+labels: ["LoRa接入", "接入节点"]
+description: "接入节点"
 
 deviceResources:
-  - name: "commandTopologyQuery"   # 命令：拓扑查询
+  - name: "cmdTopoDiagQry"   
     isHidden: false
-    description: "默认0,置1查询查询拓扑"
+    description: "拓扑查询"
     properties:
       valueType: "Int8"    
       readWrite: "W"        
       units: ""            
       defaultValue: "0"     
-  - name: "resourceTopologyDiagram"   # 资源：路由信息 <EID> <EID TYPE> <EID STA> <EID PARANT>
+  - name: "topoList"   # 资源：路由信息 <EID> <EID TYPE> <EID STA> <EID PARANT>
     isHidden: false
-    description: "拓扑内容"
+    description: "路由信息"
     properties:
       valueType: "Object"    
       readWrite: "R"        
       units: ""            
       defaultValue: "{}"     
-  - name: "resourceEid"                # 资源：EID
+  - name: "eid"               
     isHidden: false                   
-    description: "EID"
+    description: "设备标识"
     properties:
       valueType: "String"            
       readWrite: "R"                 
       units: ""                      
       defaultValue: "238A0841D828"   
-  - name: "resourceState"
+  - name: "state"
     isHidden: false
-    description: "运行状态(0=掉线,1=在线)"     # 资源：在线状态
+    description: "运行状态"     
     properties:
       valueType: "Uint8"
       readWrite: "R"
       units: "code"
       defaultValue: "0" 
-  - name: "resourceHeartbeat"
+  - name: "hBeat"
     isHidden: true
-    description: "心跳"
+    description: "心跳通道"
     properties:
       valueType: "Uint16"  
       readWrite: "R"

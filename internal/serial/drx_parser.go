@@ -19,9 +19,7 @@ func Open(portName string, baudRate int) (io.ReadWriteCloser, error) {
 	return goserial.Open(portName, mode)
 }
 
-// ParseDRXLine 解析一行形如 "+DRX:<deviceId>,<length>,<hexPayload>"
-// 的串口输出，提取出 hexPayload 并将其解码为字节切片。
-// 例如："+DRX:238A08262319,3,111111" → []byte{0x11,0x11,0x11}
+// 解析+DRX
 func ParseDRXLine(line string) ([]byte, error) {
 	// 处理 +DRX:
 	if !strings.HasPrefix(line, "+DRX:") {
@@ -33,11 +31,10 @@ func ParseDRXLine(line string) ([]byte, error) {
 		return nil, fmt.Errorf("DRX 行字段数不对：%s", line)
 	}
 	payload := parts[2]
-	// payload 必须是偶数长度，每两个字符表示一个字节
 	if len(payload)%2 != 0 {
 		return nil, fmt.Errorf("payload 长度不是偶数：%s", payload)
 	}
-	// 解码 hexPayload
+	// 解码
 	n := len(payload) / 2
 	buf := make([]byte, n)
 	for i := 0; i < n; i++ {
@@ -77,7 +74,7 @@ func StartSerialScanner(port io.Reader) {
 				break
 			}
 			line := strings.TrimSpace(rawLine)
-			// —— DRX 处理 ——
+			// DRX 处理
 			if strings.HasPrefix(line, "+DRX:") {
 				data, err := ParseDRXLine(line)
 				if err == nil {
@@ -85,24 +82,24 @@ func StartSerialScanner(port io.Reader) {
 				}
 				continue
 			}
-			// —— TOP处理 ——
+			// TOP处理
 			switch {
 			case strings.HasPrefix(line, "+TOP:"):
 				// 收到块头
 				collectingTopo = true
 				topoBuf.Reset()
-				// 取 header 后面第一段 payload
+				// 取payload
 				parts := strings.SplitN(line[len("+TOP:"):], ",", 3)
 				if len(parts) >= 3 {
 					topoBuf.WriteString(parts[2])
 				}
 			case collectingTopo && line == "OK":
-				// 收完尾部 OK，完成一块
+				// 尾部OK，完成一块
 				block := "+TOP:" + topoBuf.String() + "OK"
 				TopoChan <- block
 				collectingTopo = false
 			case collectingTopo:
-				// 中间续行，拼接
+				// 中间续行
 				payload := strings.TrimSuffix(line, ",")
 				topoBuf.WriteString("," + payload)
 			default:

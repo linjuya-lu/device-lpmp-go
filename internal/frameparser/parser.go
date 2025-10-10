@@ -15,14 +15,12 @@ import (
 
 type CallbackFunc func(deviceName, sourceName string, values map[string]interface{})
 
-// 依照《Q/GDW 12184—2021》附录 D 业务报文解析
+// 业务报文解析
 func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
-	// fmt.Printf("[StartParser] cb=%p\n", cb)
-
 	go func() {
 		for frame := range frameCh {
 			fmt.Printf("Received frame (%d bytes): % X\n", len(frame), frame)
-			// 最小长度校验：6字节ID +1字节头 +2字节CRC
+			// 最小长度校验
 			if len(frame) < 9 {
 				log.Println("帧长度不足，跳过解析")
 				continue
@@ -30,18 +28,16 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			// CRC 校验
 			payload := frame[:len(frame)-2]
 			recvCRC := binary.BigEndian.Uint16(frame[len(frame)-2:])
-			// 读取6字节SensorID
+			// EID
 			sidBytes := frame[0:6]
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
 			deviceName, hasDevice := config.LookupDeviceName(sensorID)
 			if !hasDevice {
-				log.Printf("SensorIDToDeviceName keys: %#v", config.SensorIDToDeviceName)
-				log.Printf(">>[%s]<<", sensorID)
-				log.Printf("未知11 SensorID=%s，跳过本帧", sensorID)
+				log.Printf("未知 EID=%s，跳过本帧", sensorID)
 				continue
 			}
 			onDataReceived(deviceName)
-			// 读取头部：4bit DataLen、1bit FragInd、3bit PacketType
+			// 头部
 			head := frame[6]
 			dataCount := int(head >> 4)  // 参量个数
 			fragInd := (head >> 3) & 0x1 // 分片指示
@@ -73,7 +69,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				Check:      recvCRC,
 			}
 			if fragInd == 0 {
-				// 非分片帧：只处理业务或控制报文
+				// 非分片帧
 				switch packetType {
 				case 0:
 					SendDataStatus(sensorID, 0b001, 0xFF, byte(dataCount))
@@ -85,19 +81,18 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					// 控制报文响应
 					handleFrameCtl(frame_ctl)
 					if config.ResourcesFlag {
-						cb(deviceName, "resourceReporting", config.Resources1)
+						cb(deviceName, "AsyncReporting", config.Resources1)
 						config.ResourcesFlag = false
 					}
 					continue
 				default:
-					// 其他 packetType 的非分片帧，不处理
+					// 非分片帧，不处理
 					continue
 				}
 			} else {
 				// 分片帧
-				ProcessFrame(frame_ctl)
 			}
-			// 从第7字节开始解析参数数据，末尾2字节为CRC
+			// CRC
 			idx := 7
 			parsed := 0
 			resourceValues := make(map[string]interface{})
@@ -115,7 +110,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				var dataLen uint32
 				switch lenFlag {
 				case 0:
-					dataLen = 4 // 默认4字节
+					dataLen = 4
 				case 1:
 					dataLen = uint32(frame[idx])
 					idx++
@@ -127,7 +122,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					idx += 3
 				}
 
-				// 提取原始值字节
+				// 原始值字节
 				log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
 
 				valBytes := frame[idx : idx+int(dataLen)]
@@ -136,12 +131,11 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				if info, ok := config.LookupParamInfo(paramType); ok {
 					val, err := info.Parse(valBytes)
 					if err != nil {
-						log.Printf("❌ 参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
+						log.Printf("参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
 					} else {
-						// 写入运行时值表
 						config.SetDeviceValue(deviceName, info.Name, val)
 						resourceValues[info.Name] = val
-						log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+						log.Printf("写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 					}
 				} else {
 					log.Printf("未找到参数类型信息 type=0x%X", paramType)
@@ -151,7 +145,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			log.Printf("[DEBUG] parsed=%d dataCount=%d len(resourceValues)=%d cb=%v",
 				parsed, dataCount, len(resourceValues), cb != nil)
 
-			// 解析完成，调用回调
 			fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
 
 			if cb != nil && len(resourceValues) > 0 {
@@ -172,15 +165,15 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	if len(keyBytes) != 6 {
 		return errors.New("sensorKey hex must decode to 6 bytes")
 	}
-	// 构造 Header (1 byte)
-	const fragInd = 0 // 未分片
+	// 构造 Header
+	const fragInd = 0
 	header := (dataLen<<4)&0xF0 | (fragInd<<3)&0x08 | (packetType & 0x07)
 	// 拼接帧：SensorID + Header + Data_Status
 	packet := make([]byte, 0, len(keyBytes)+1+1+2)
 	packet = append(packet, keyBytes...)
 	packet = append(packet, header)
 	packet = append(packet, dataStatus)
-	//追加 CRC16
+	//CRC16
 	crc := CRC16(packet)
 	packet = append(packet, byte(crc>>8), byte(crc&0xFF))
 	//发送
@@ -190,5 +183,5 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 
 func onDataReceived(deviceName string) {
 	ts := time.Now().UnixNano()
-	config.SetDeviceValue(deviceName, "resourceLastDataTimestamp", ts)
+	config.SetDeviceValue(deviceName, "LastDataTs", ts)
 }

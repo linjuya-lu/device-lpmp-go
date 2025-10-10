@@ -24,25 +24,25 @@ func startHealthCheckLoop() {
 			config.Mu.RUnlock()
 
 			for _, dev := range deviceNames {
-				if dev == "Access-Node-01" {
+				if dev == "AccessNode01" {
 					continue
 				}
 
-				rawTs, okTs := config.GetDeviceValue(dev, "resourceLastDataTimestamp")
-				rawPr, okPr := config.GetDeviceValue(dev, "resourcePeriod")
+				rawTs, okTs := config.GetDeviceValue(dev, "LastDataTs")
+				rawPr, okPr := config.GetDeviceValue(dev, "period")
 				if !okTs || !okPr {
 					fmt.Printf("[health] dev=%s missing key(s): ts=%v pr=%v\n", dev, okTs, okPr)
 					continue
 				}
 
-				// lastTs: 期望纳秒
+				// 时间戳
 				lastNs, okTsCast := asInt64Ns(rawTs)
 				if !okTsCast {
 					fmt.Printf("[health] dev=%s bad ts type=%T val=%v (expect ns int64)\n", dev, rawTs, rawTs)
 					continue
 				}
 
-				// period: 期望“秒”，但容忍多种类型
+				// 周期
 				periodSec, okPrCast := asUint64Seconds(rawPr)
 				if !okPrCast {
 					fmt.Printf("[health] dev=%s bad period type=%T val=%v (expect seconds)\n", dev, rawPr, rawPr)
@@ -61,24 +61,13 @@ func startHealthCheckLoop() {
 					newState = 0 // 超时=离线
 				}
 
-				// fmt.Printf("[health] dev=%s now=%d lastTs=%d elapsed=%s deadline=%s -> state=%d\n",
-				// 	dev,
-				// 	nowNs,
-				// 	lastNs,
-				// 	time.Duration(elapsedNs),
-				// 	time.Duration(deadlineNs),
-				// 	newState,
-				// )
-
-				config.SetDeviceValue(dev, "resourceState", newState)
+				config.SetDeviceValue(dev, "state", newState)
 			}
 		}
 	}()
 }
 
-// ---------- 辅助转换 ----------
-
-// 将各种常见整型/字符串时间戳转为 ns（你的 ts 就是 UnixNano，直接透传）
+// 将整型/字符串时间戳转为ns
 func asInt64Ns(v interface{}) (int64, bool) {
 	switch t := v.(type) {
 	case int64:
@@ -88,7 +77,7 @@ func asInt64Ns(v interface{}) (int64, bool) {
 	case float64:
 		return int64(t), true
 	case string:
-		// 有些默认值可能是字符串
+		// 字符串
 		if n, err := strconv.ParseInt(t, 10, 64); err == nil {
 			return n, true
 		}
@@ -98,7 +87,7 @@ func asInt64Ns(v interface{}) (int64, bool) {
 	}
 }
 
-// 将 period（秒）统一到 uint64，容忍 Uint16/Uint32/Uint64/int/float/string
+// 将周期秒统一到 uint64
 func asUint64Seconds(v interface{}) (uint64, bool) {
 	switch t := v.(type) {
 	case uint16:

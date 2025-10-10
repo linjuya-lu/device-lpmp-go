@@ -9,35 +9,33 @@ import (
 	"time"
 )
 
-// Frame 代表“通用传感器报文”
+// 通用传感器报文
 type Frame struct {
-	SensorID   string // 传感器 ID，6 字节
-	DataLen    byte   // 参量个数，使用下位 4 位即可，或者直接用 uint32 存放 m
-	FragInd    byte   // 分片指示，true=已分片, false=未分片
-	PacketType byte   // 报文类型，3 字节，例：0x00,0x01,0x00 表示类型 100
+	SensorID   string // EID
+	DataLen    byte   // 参量个数
+	FragInd    byte   // 分片指示
+	PacketType byte   // 报文类型
 	Payload    []byte // 报文内容
-	Check      uint16 // 校验位，2 字节 CRC
+	Check      uint16 // 校验位
 }
 
-// Bytes 把 Frame 转成 []byte
+// 转换成字节
 func (f *Frame) Bytes() []byte {
 	buf := make([]byte, 0, 6+1+1+1+len(f.Payload)+2)
 	buf = append(buf, f.SensorID[:]...)
 	buf = append(buf, f.DataLen)
-	// flags：高4位 DataLen，下一位 FragInd，低3位 PacketType
 	flags := (f.DataLen << 4) | byte(f.FragInd<<3) | byte(f.PacketType)
 	buf = append(buf, flags)
 	buf = append(buf, f.Payload...)
-	// CRC16 要先转成大/小端两字节，比如小端：
 	crc := []byte{byte(f.Check), byte(f.Check >> 8)}
 	buf = append(buf, crc...)
 	return buf
 }
 
 type ResponseKey struct {
-	// 控制报文类型：只用低 7 位
+	// 控制报文类型
 	CtrlType uint8
-	// 参数配置类型标识：1 bit，0/1
+	// 参数配置类型标识
 	RequestSetFlag bool
 }
 
@@ -65,11 +63,12 @@ func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
 	return handle, ok
 }
 
-// ===================== 通用解析函数 =====================
-var Resources1 = make(map[string]interface{})
-var ResourcesFlag bool = false
+var (
+	Resources1         = make(map[string]interface{})
+	ResourcesFlag bool = false
+)
 
-// 通用参数查询/设置
+// 参数查询/设置
 func common_para_response(data []byte, frameCtl Frame) error {
 	idx := 0
 	parsed := 0
@@ -122,13 +121,13 @@ func common_para_response(data []byte, frameCtl Frame) error {
 		if info, ok := LookupParamInfo(paramType); ok {
 			val, err := info.Parse(valBytes)
 			if err != nil {
-				log.Printf("❌ 参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
+				log.Printf("参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
 			} else {
 				// 写入运行时值表
 				SetDeviceValue(deviceName, info.Name, val)
 				Resources1[info.Name] = val
 
-				log.Printf("✅ 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+				log.Printf("写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
 			}
 		} else {
 			log.Printf("未找到参数类型信息 type=0x%X", paramType)
@@ -143,9 +142,6 @@ func common_para_response(data []byte, frameCtl Frame) error {
 // 时间参数查询/设置
 func timestamp_response(data []byte, frameCtl Frame) error {
 
-	// secs := binary.LittleEndian.Uint32(data)
-	// 转换为本地时区时间
-	// t := time.Unix(int64(secs), 0)
 	deviceName, hasDevice := LookupDeviceName(frameCtl.SensorID)
 	if !hasDevice {
 		log.Printf("未知 SensorID=%s，跳过本帧", frameCtl.SensorID)
@@ -185,12 +181,7 @@ func resetCommands(data []byte, frameCtl Frame) error {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		return err
 	}
-	eidStr, ok := eidValue.(string)
-	if !ok {
-		err := fmt.Errorf("设备 %s 的 EID 类型错误，期望 string，实际 %T", deviceName, eidValue)
-		return err
-	}
-	eidStr = "238A0841D828"
+	eidStr := "238A0841D828"
 	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(eidStr)
 	if err != nil {

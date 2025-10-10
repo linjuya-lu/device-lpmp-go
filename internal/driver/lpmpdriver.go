@@ -25,8 +25,10 @@ type LpMpDriver struct {
 	sdk     interfaces.DeviceServiceSDK
 }
 
-var once sync.Once
-var driver *LpMpDriver
+var (
+	once   sync.Once
+	driver *LpMpDriver
+)
 
 func LpMpDeviceDriver() interfaces.ProtocolDriver {
 	once.Do(func() {
@@ -63,12 +65,7 @@ func (d *LpMpDriver) Start() error {
 	frameparser.StartParser(serial.DrxChan, d.AsyncReporting)
 	//命令下发
 	serial.StartWriteWorker(serialPort)
-	//波形/图像数据解析
-	go func() {
-		if err := frameparser.ShardingParser(frameparser.SDUCh); err != nil {
-			d.lc.Error("ShardingParser 异常退出: %v", err)
-		}
-	}()
+
 	//拓扑处理器
 	serial.StartTopoProcessor(serial.TopoChan)
 	//心跳上传
@@ -93,7 +90,7 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
 		// 路由信息
-		if resName == "resourceTopologyDiagram" {
+		if resName == "topoList" {
 
 			serial.SendTopoQuery(0, 10)
 			//500ms
@@ -131,42 +128,36 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 	defer d.locker.Unlock()
 
 	d.lc.Infof("HandleWriteCommands 调用: 设备=%s, 写入请求数=%d", deviceName, len(reqs))
-	// 请求数与参数数必须一致
-	if len(reqs) != len(params) {
-		d.lc.Errorf("请求数与参数数不匹配: %d vs %d", len(reqs), len(params))
-		return fmt.Errorf("请求数与参数数不匹配")
-	}
 	for i, req := range reqs {
 		resName := req.DeviceResourceName
 		cv := params[i]
 		v, _ := cv.Int8Value()
-		// d.lc.Infof("Int8Value = %d", v)
-		// 时间参数查询且值为 1
-		if resName == "commandTimeParameterQuery" && v == 1 {
+		// 时间参数查询
+		if resName == "cmdTimeParamQry" && v == 1 {
 			if err := d.handleTimeParameterQuery(deviceName); err != nil {
 				return err
 			}
 		}
-		// 时间参数设置且值为 1
-		if resName == "commandTimeParameterSet" && v == 1 {
+		// 时间参数设置
+		if resName == "cmdTimeParamSet" && v == 1 {
 			if err := d.handleTimeParameterSet(deviceName); err != nil {
 				return err
 			}
 		}
-		// 复位命令且值为 1
-		if resName == "commandResetSet" && v == 1 {
+		// 复位命令
+		if resName == "cmdReSet" && v == 1 {
 			if err := d.handleResetCommand(deviceName); err != nil {
 				return err
 			}
 		}
-		// 检测数据查询且值为 1
-		if resName == "commandMonitoringDataQuery" && v == 1 {
+		// 工况数据查询
+		if resName == "cmdOperDataQ" && v == 1 {
 			if err := d.handleIdMoniDataQuery(deviceName); err != nil {
 				return err
 			}
 		}
-		// 拓扑查询命令且值为 1
-		if resName == "commandTopologyQuery" && v == 1 {
+		// 拓扑查询
+		if resName == "cmdTopoDiagQry" && v == 1 {
 			serial.SendTopoQuery(0, 10)
 		}
 	}
@@ -180,24 +171,20 @@ func (d *LpMpDriver) Stop(force bool) error {
 	return nil
 }
 
-// AddDevice 在设备被添加到 Core Metadata 时调用，
-// 从 Metadata 中加载 Device 和对应的 DeviceProfile，
-// 并针对每个 DeviceResource 调用 CopyDeviceValues 进行初始化。
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("新设备已添加: %s", deviceName)
-	// 获取 Device 对象
+	// 获取Device
 	dev, err := d.sdk.GetDeviceByName(deviceName)
 	if err != nil {
 		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
 	}
-	// 从 Device 中取出 Profile 名称
 	profileName := dev.ProfileName
-	// 获取对应的 DeviceProfile
+	// 获取Profile
 	prof, err := d.sdk.GetProfileByName(profileName)
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-	// 针对每个资源执行初始化，传递默认值和类型
+	// 初始化
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -222,7 +209,7 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-	// 针对每个资源重新初始化，传递默认值和类型
+	// 初始化
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -240,12 +227,12 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	d.lc.Debugf("Device %s is removed", deviceName)
 
-	// 删除运行时值表
+	// 删除资源
 	if err := config.DeleteDeviceValues(deviceName); err != nil {
 		d.lc.Errorf("删除设备 %s 的运行时值失败: %v", deviceName, err)
 		return fmt.Errorf("删除设备 %s 的运行时值失败: %w", deviceName, err)
 	}
-	// 删除 sensorID 到 deviceName 的所有映射
+	// 删除映射
 	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {
 		d.lc.Errorf("删除设备 %s 的传感器映射失败: %v", deviceName, err)
 		return fmt.Errorf("删除设备 %s 的传感器映射失败: %w", deviceName, err)
@@ -262,7 +249,7 @@ func (d *LpMpDriver) Discover() error {
 	return fmt.Errorf("driver's Discover function isn't implemented")
 }
 
-// val 转换为与 EdgeX ValueType 匹配的具体类型
+// val 转换ValueType 匹配类型
 func coerceTo(val any, valueType string) (any, error) {
 	switch valueType {
 

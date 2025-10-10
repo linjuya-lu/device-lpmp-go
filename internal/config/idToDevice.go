@@ -5,7 +5,6 @@ import (
 	"sync"
 )
 
-// sensorIDToDeviceName 是传感器 6 字节 ID（大写十六进制）到本地逻辑设备名的映射
 var (
 	mu1                  sync.RWMutex
 	SensorIDToDeviceName = map[string]string{
@@ -13,7 +12,7 @@ var (
 	}
 )
 
-// AddMapping 添加一条 SensorID -> DeviceName 映射，若存在则覆盖
+// 添加一条映射
 func AddMapping(sensorID, deviceName string) {
 	mu1.Lock()
 	defer mu1.Unlock()
@@ -21,7 +20,7 @@ func AddMapping(sensorID, deviceName string) {
 	fmt.Printf("Mapping added: %s -> %s\n", sensorID, deviceName)
 }
 
-// DeleteMapping 删除指定 SensorID 的映射，若不存在返回错误
+// 删除指定映射
 func DeleteMapping(sensorID string) error {
 	mu1.Lock()
 	defer mu1.Unlock()
@@ -33,7 +32,7 @@ func DeleteMapping(sensorID string) error {
 	return nil
 }
 
-// UpdateMapping 更新指定 SensorID 的 DeviceName，若不存在返回错误
+// 更新映射
 func UpdateMapping(sensorID, newDeviceName string) error {
 	mu1.Lock()
 	defer mu1.Unlock()
@@ -45,7 +44,7 @@ func UpdateMapping(sensorID, newDeviceName string) error {
 	return nil
 }
 
-// LookupDeviceName 根据大写十六进制的 SensorID 返回逻辑设备名
+// 由EID找设备名
 func LookupDeviceName(sensorID string) (deviceName string, ok bool) {
 	mu1.RLock()
 	defer mu1.RUnlock()
@@ -53,16 +52,15 @@ func LookupDeviceName(sensorID string) (deviceName string, ok bool) {
 	return
 }
 
-// UpdateSensorMapping 扫描 valuesMap，把资源名为 "EID" 的值映射到设备名
+// EID映射
 func UpdateSensorMapping() {
 	mu1.Lock()
 	defer mu1.Unlock()
-
 	// 清空旧映射
 	SensorIDToDeviceName = make(map[string]string)
 
 	for deviceName, resourceMap := range ValuesMap {
-		raw, exists := resourceMap["resourceEid"]
+		raw, exists := resourceMap["eid"]
 		if !exists {
 			continue
 		}
@@ -73,7 +71,6 @@ func UpdateSensorMapping() {
 		case []byte:
 			eid = string(v)
 		default:
-			// 其他类型统一用 fmt.Sprint 转成字符串
 			eid = fmt.Sprint(v)
 		}
 		if eid == "" {

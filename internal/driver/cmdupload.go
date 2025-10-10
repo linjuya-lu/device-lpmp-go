@@ -80,7 +80,7 @@ func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values
 		deviceName, sourceName, len(cvs))
 }
 
-// 每60秒遍历一次 ValuesMap
+// 心跳上传
 func (d *LpMpDriver) StartAsyncReporter() {
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -93,14 +93,14 @@ func (d *LpMpDriver) StartAsyncReporter() {
 					continue
 				}
 
-				stateVal, ok := resMap["resourceState"]
+				stateVal, ok := resMap["state"]
 				if !ok {
 					continue
 				}
 				values := map[string]interface{}{
-					"resourceState": stateVal,
+					"state": stateVal,
 				}
-				d.AsyncReporting(deviceName, "resourceHeartbeat", values)
+				d.AsyncReporting(deviceName, "hBeat", values)
 			}
 			config.Mu.RUnlock()
 		}

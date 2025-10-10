@@ -2,12 +2,8 @@ package frameparser
 
 import "encoding/binary"
 
-// 封装 7.4 节 告警参数查询/设置报文
-// BuildAlarmParameterQueryFrame 构造 “告警参数查询” 控制报文。
-//
-//	sensorID: 原始 6 字节传感器 ID。
-//
-// 返回值：含 CRC16 的完整报文字节 slice，或出错。
+// 告警参数查询/设置报文
+
 func BuildAlarmParameterQueryFrame(sensorID [6]byte) ([]byte, error) {
 	const (
 		packetType     = 0x04 // 3bit = 100b
@@ -16,19 +12,18 @@ func BuildAlarmParameterQueryFrame(sensorID [6]byte) ([]byte, error) {
 		fragInd        = 0    // 1bit
 		requestSetFlag = 0    // 1bit = 查询
 	)
-	// 拼前 6 字节 SensorID
+	// EID
 	buf := make([]byte, 0, 6+1+1+2)
 	buf = append(buf, sensorID[:]...)
-	//head：DataLen(4)|FragInd(1)|PacketType(3)
+	//head
 	head := byte((dataLen&0x0F)<<4) |
 		byte((fragInd&0x01)<<3) |
 		byte(packetType&0x07)
 	buf = append(buf, head)
-	//ctrlByte：CtrlType(7)|RequestSetFlag(1)
+	//ctrlByte
 	ctrlByte := byte((ctrlAlarmQuery&0x7F)<<1) |
 		byte(requestSetFlag&0x01)
 	buf = append(buf, ctrlByte)
-	// （不带 ParameterList，因为请求所有告警参数）
 	// CRC16
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)

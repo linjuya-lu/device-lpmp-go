@@ -1,19 +1,22 @@
 deviceList:
-  - name: "Access-Node-01"
-    profileName: "Access-Node-Profile-01"
+  - name: "AccessNode01"
+    profileName: "AccessNode"
     description: "汇源接入节点"
-    labels:
-      - access-node-device
+    labels: ["LoRa接入", "接入节点"]
     protocols:
       custom:
-        location: /dev/ttyUSB0
-        baudRate: "115200"
-  - name: "Sink-Node-01"
-    profileName: "Sink-Node-Profile-01"
-    description: "汇源汇聚节点"
-    labels:
-      - sinke-node-device
+        type: "UART"
+  - name: "SinkNode01"
+    profileName: "SinkNode"
+    description: "汇源汇聚节点01"
+    labels: ["汇聚网关01", "汇聚节点01"]
     protocols:
       custom:
-        location: /dev/ttyUSB0
-        baudRate: "115200"
+        type: "LoRa"
+  - name: "MicWeather01"
+    profileName: "MicWeather"
+    description: "微气象传感器"
+    labels: ["汇聚微气象01", "微气象传感器01"]
+    protocols:
+      custom:
+        type: "RS485"
