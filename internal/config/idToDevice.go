@@ -7,12 +7,10 @@ import (
 
 var (
 	mu1                  sync.RWMutex
-	SensorIDToDeviceName = map[string]string{
-		"238A08262319": "Data-Demo",
-	}
+	SensorIDToDeviceName = map[string]string{}
 )
 
-// 添加一条映射
+// 添加映射
 func AddMapping(sensorID, deviceName string) {
 	mu1.Lock()
 	defer mu1.Unlock()
@@ -20,7 +18,7 @@ func AddMapping(sensorID, deviceName string) {
 	fmt.Printf("Mapping added: %s -> %s\n", sensorID, deviceName)
 }
 
-// 删除指定映射
+// 删除映射
 func DeleteMapping(sensorID string) error {
 	mu1.Lock()
 	defer mu1.Unlock()

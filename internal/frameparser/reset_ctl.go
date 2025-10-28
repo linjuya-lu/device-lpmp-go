@@ -1,11 +1,10 @@
 package frameparser
 
-//传感器复位设置报文
 import (
 	"encoding/binary"
 )
 
-// 构造复位控制报文。
+// 复位报文
 func BuildResetRequest(sensorID [6]byte) ([]byte, error) {
 	const (
 		packetType     = 0x04
@@ -17,15 +16,15 @@ func BuildResetRequest(sensorID [6]byte) ([]byte, error) {
 	// EID
 	buf := make([]byte, 0, 6+1+1+2)
 	buf = append(buf, sensorID[:]...)
-	// head
+	// 头
 	head := byte((dataLen&0x0F)<<4) |
 		byte((fragInd&0x01)<<3) |
 		byte(packetType&0x07)
 	buf = append(buf, head)
-	// CtrlType(7bit) + RequestSetFlag(1bit)
+	// 控制部分
 	ctrlByte := byte((ctrlType&0x7F)<<1) | byte(requestSetFlag&0x01)
 	buf = append(buf, ctrlByte)
-	//  CRC16
+	//  校验
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)

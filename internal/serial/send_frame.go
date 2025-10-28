@@ -21,7 +21,7 @@ func WriteFrame(port io.ReadWriteCloser, frame []byte) error {
 	return nil
 }
 
-// 命令下发协程
+// 命令下发
 func StartWriteWorker(port io.ReadWriteCloser) {
 	go func() {
 		for frame := range config.WriteChan {

@@ -1,33 +1,31 @@
 package frameparser
 
-// 监测参数查询/设置报文
-
 import (
 	"encoding/binary"
 )
 
-// 传感器监测数据查询 控制报文。
+// 工况查询
 func BuildMonitoringDataQueryFrame(sensorID [6]byte) ([]byte, error) {
 	const (
-		packetType       = 0x04 // 3bit = 100b
-		ctrlTypeMonitor  = 0x02 // 7bit，协议中“请求监测数据”对应的 CtrlType
-		dataLenAllParams = 0x0F // 4bit = 1111b, 表示请求所有可采集参数
-		fragInd          = 0    // 1bit，未分片
-		requestSetFlag   = 0    // 1bit，查询
+		packetType       = 0x04 // 100b
+		ctrlTypeMonitor  = 0x02 // 控制类型
+		dataLenAllParams = 0x0F // 1111b, 所有可采集参数
+		fragInd          = 0    // 未分片
+		requestSetFlag   = 0    // 查询
 	)
 	// EID
 	buf := make([]byte, 0, 6+1+1+2)
 	buf = append(buf, sensorID[:]...)
-	// head
+	// 头
 	head := byte((dataLenAllParams&0x0F)<<4) |
 		byte((fragInd&0x01)<<3) |
 		byte(packetType&0x07)
 	buf = append(buf, head)
-	// ctrlByte
+	// 控制
 	ctrlByte := byte((ctrlTypeMonitor&0x7F)<<1) |
 		byte(requestSetFlag&0x01)
 	buf = append(buf, ctrlByte)
-	// CRC16
+	// 校验
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)

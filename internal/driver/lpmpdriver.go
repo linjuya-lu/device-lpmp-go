@@ -46,72 +46,119 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *LpMpDriver) Start() error {
-	// 参数
-	devicesYAML := "../cmd/res/devices/devices.yaml"
-	profilesDir := "../cmd/res/profiles"
-	portName := "/dev/ttyUSB0"
-	baudRate := 115200
 	// 初始化
-	if err := config.InitDeviceResources(devicesYAML, profilesDir); err != nil {
+	if err := config.InitDeviceResources(config.DevicesYAML, config.ProfilesDir); err != nil {
 		return fmt.Errorf("初始化设备资源失败: %w", err)
 	}
-	serialPort, err := serial.Open(portName, baudRate)
+	serialPort, err := serial.Open(config.PortName, config.BaudRate)
 	if err != nil {
-		return fmt.Errorf("打开串口 %s 失败: %w", portName, err)
+		return fmt.Errorf("打开串口 %s 失败: %w", config.PortName, err)
 	}
-	// AT指令解析
+	config.UpdateSensorMapping()
+	// Lora解析
 	serial.StartSerialScanner(serialPort)
-	// 业务协议解析
 	frameparser.StartParser(serial.DrxChan, d.AsyncReporting)
-	//命令下发
+	serial.StartTopoProcessor(serial.TopoChan)
+	//命令处理
 	serial.StartWriteWorker(serialPort)
 
-	//拓扑处理器
-	serial.StartTopoProcessor(serial.TopoChan)
-	//心跳上传
+	//心跳维护
+	startHealthCheckLoop()
 	d.StartAsyncReporter()
-	//做EID和设备名的初步映射
-	config.UpdateSensorMapping()
-	startHealthCheckLoop() //状态控制函数
-	InitDevice()
-	d.lc.Infof("lpmp设备服务已启动")
+	d.lc.Infof("lpmp设备服务已启动......")
 	return nil
 }
 
 func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties, reqs []dsModels.CommandRequest) (res []*dsModels.CommandValue, err error) {
 	d.locker.Lock()
 	defer d.locker.Unlock()
-	d.lc.Infof("HandleReadCommands 调用: 设备=%s, 请求资源数=%d", deviceName, len(reqs))
+	d.lc.Debug("读取命令 : 设备=%s, 资源数=%d", deviceName, len(reqs))
 
 	values, ok := config.GetDeviceValues(deviceName)
 	if !ok {
-		return nil, fmt.Errorf("设备 %s 未找到或无可用值", deviceName)
+		return nil, fmt.Errorf(" 设备 %s 未找到或无可用值", deviceName)
 	}
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
-		// 路由信息
-		if resName == "topoList" {
-
-			serial.SendTopoQuery(0, 10)
-			//500ms
-			time.Sleep(500 * time.Millisecond)
+		// 请求路由
+		if resName == "resourceTopologyDiagram" {
 			topo := serial.GetTopoList()
-			fmt.Printf("topo:%s", topo)
+			fmt.Printf("拓扑路由:%s", topo)
 			cv, cerr := dsModels.NewCommandValue(
 				resName,
 				common.ValueTypeObject,
 				topo,
 			)
 			if cerr != nil {
+				return nil, fmt.Errorf("NewCommandValue函数 失败: %w", cerr)
+			}
+			res = append(res, cv)
+			continue
+		}
+		// 时间查询
+		if resName == "cmdTimeParamQry" {
+			if err := d.handleTimeParameterSet(deviceName); err != nil {
+				return nil, err
+			}
+			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
+			if cerr != nil {
 				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
 			}
 			res = append(res, cv)
 			continue
 		}
-		// 一般资源
+		// 复位设置
+		if resName == "cmdReSet" {
+			if err := d.handleResetCommand(deviceName); err != nil {
+				return nil, err
+			}
+			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
+			if cerr != nil {
+				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
+			}
+			res = append(res, cv)
+			continue
+		}
+		// 时间设置
+		if resName == "cmdTimeParamSet" {
+			if err := d.handleTimeParameterSet(deviceName); err != nil {
+				return nil, err
+			}
+			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
+			if cerr != nil {
+				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
+			}
+			res = append(res, cv)
+			continue
+		}
+		// 工况查询
+		if resName == "cmdOperDataQ" {
+			if err := d.handleIdMoniDataQuery(deviceName); err != nil {
+				return nil, err
+			}
+			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
+			if cerr != nil {
+				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
+			}
+			res = append(res, cv)
+			continue
+		}
+		// 拓扑查询
+		if resName == "cmdTopoDiagQry" {
+			serial.ClearTopo()
+
+			serial.SendTopoQuery(0, 10)
+			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
+			if cerr != nil {
+				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
+			}
+			res = append(res, cv)
+			continue
+		}
+		// 常规资源
 		val, exists := values[resName]
 		if !exists {
-			return nil, fmt.Errorf("设备 %s 上未找到资源 %s 的值", deviceName, resName)
+			return nil, fmt.Errorf(" 设备 %s 上未找到资源 %s 的值", deviceName, resName)
 		}
 		cv, err := makeCV(resName, req.Type, val)
 		if err != nil {
@@ -127,64 +174,38 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 	d.locker.Lock()
 	defer d.locker.Unlock()
 
-	d.lc.Infof("HandleWriteCommands 调用: 设备=%s, 写入请求数=%d", deviceName, len(reqs))
+	d.lc.Debug("设备=%s, 请求数=%d", deviceName, len(reqs))
+
 	for i, req := range reqs {
 		resName := req.DeviceResourceName
-		cv := params[i]
-		v, _ := cv.Int8Value()
-		// 时间参数查询
-		if resName == "cmdTimeParamQry" && v == 1 {
-			if err := d.handleTimeParameterQuery(deviceName); err != nil {
-				return err
-			}
-		}
-		// 时间参数设置
-		if resName == "cmdTimeParamSet" && v == 1 {
-			if err := d.handleTimeParameterSet(deviceName); err != nil {
-				return err
-			}
-		}
-		// 复位命令
-		if resName == "cmdReSet" && v == 1 {
-			if err := d.handleResetCommand(deviceName); err != nil {
-				return err
-			}
-		}
-		// 工况数据查询
-		if resName == "cmdOperDataQ" && v == 1 {
-			if err := d.handleIdMoniDataQuery(deviceName); err != nil {
-				return err
-			}
-		}
-		// 拓扑查询
-		if resName == "cmdTopoDiagQry" && v == 1 {
-			serial.SendTopoQuery(0, 10)
-		}
+
+		d.lc.Debug("常规命令 %d Resource=%s", i, resName)
+
 	}
 	return nil
 }
 
 func (d *LpMpDriver) Stop(force bool) error {
-	d.lc.Info("LpmpDriver.Stop: device-lpmp driver is stopping...")
-	// 关闭通道
+	d.lc.Info("无线汇聚结束......")
 	close(config.WriteChan)
 	return nil
 }
 
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("新设备已添加: %s", deviceName)
-	// 获取Device
+
 	dev, err := d.sdk.GetDeviceByName(deviceName)
 	if err != nil {
 		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
 	}
+
 	profileName := dev.ProfileName
-	// 获取Profile
+
 	prof, err := d.sdk.GetProfileByName(profileName)
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-	// 初始化
+
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -192,7 +213,7 @@ func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.Pr
 		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
 			return fmt.Errorf("初始化设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
-		d.lc.Infof("已将设备 %s 的资源 %s 初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+		d.lc.Debugf("已将设备 %s 的资源 %s 初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 	}
 	return nil
 }
@@ -209,7 +230,6 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-	// 初始化
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -217,7 +237,7 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
 			return fmt.Errorf("更新设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
-		d.lc.Infof("已将设备 %s 的资源 %s 重新初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+		d.lc.Debugf("已将设备 %s 的资源 %s 重新初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 	}
 
 	d.lc.Infof("已刷新设备 %s 的资源值为最新默认配置", deviceName)
@@ -227,12 +247,11 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	d.lc.Debugf("Device %s is removed", deviceName)
 
-	// 删除资源
 	if err := config.DeleteDeviceValues(deviceName); err != nil {
 		d.lc.Errorf("删除设备 %s 的运行时值失败: %v", deviceName, err)
 		return fmt.Errorf("删除设备 %s 的运行时值失败: %w", deviceName, err)
 	}
-	// 删除映射
+
 	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {
 		d.lc.Errorf("删除设备 %s 的传感器映射失败: %v", deviceName, err)
 		return fmt.Errorf("删除设备 %s 的传感器映射失败: %w", deviceName, err)
@@ -242,14 +261,14 @@ func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models
 }
 
 func (d *LpMpDriver) ValidateDevice(device models.Device) error {
-	d.lc.Debug("Driver's ValidateDevice function isn't implemented")
+	d.lc.Debug("ValidateDevice 未实现")
 	return nil
 }
 func (d *LpMpDriver) Discover() error {
-	return fmt.Errorf("driver's Discover function isn't implemented")
+	return fmt.Errorf("Discover 未实现")
 }
 
-// val 转换ValueType 匹配类型
+// EdgeX类型匹配
 func coerceTo(val any, valueType string) (any, error) {
 	switch valueType {
 
@@ -260,7 +279,7 @@ func coerceTo(val any, valueType string) (any, error) {
 		case string:
 			b, err := strconv.ParseBool(x)
 			if err != nil {
-				return nil, fmt.Errorf("parse %q as bool: %w", x, err)
+				return nil, fmt.Errorf("coerceTo parse %q as bool: %w", x, err)
 			}
 			return b, nil
 		case float64:
@@ -272,7 +291,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeInt8:
 		if v, ok := toInt64(val); ok {
 			if v < math.MinInt8 || v > math.MaxInt8 {
-				return nil, fmt.Errorf("overflow: %v not in int8 range", v)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in int8 range", v)
 			}
 			return int8(v), nil
 		}
@@ -281,7 +300,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeInt16:
 		if v, ok := toInt64(val); ok {
 			if v < math.MinInt16 || v > math.MaxInt16 {
-				return nil, fmt.Errorf("overflow: %v not in int16 range", v)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in int16 range", v)
 			}
 			return int16(v), nil
 		}
@@ -290,7 +309,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeInt32:
 		if v, ok := toInt64(val); ok {
 			if v < math.MinInt32 || v > math.MaxInt32 {
-				return nil, fmt.Errorf("overflow: %v not in int32 range", v)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in int32 range", v)
 			}
 			return int32(v), nil
 		}
@@ -305,7 +324,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeUint8:
 		if v, ok := toUint64(val); ok {
 			if v > math.MaxUint8 {
-				return nil, fmt.Errorf("overflow: %v not in uint8 range", v)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in uint8 range", v)
 			}
 			return uint8(v), nil
 		}
@@ -314,7 +333,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeUint16:
 		if v, ok := toUint64(val); ok {
 			if v > math.MaxUint16 {
-				return nil, fmt.Errorf("overflow: %v not in uint16 range", v)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in uint16 range", v)
 			}
 			return uint16(v), nil
 		}
@@ -323,7 +342,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeUint32:
 		if v, ok := toUint64(val); ok {
 			if v > math.MaxUint32 {
-				return nil, fmt.Errorf("overflow: %v not in uint32 range", v)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in uint32 range", v)
 			}
 			return uint32(v), nil
 		}
@@ -338,7 +357,7 @@ func coerceTo(val any, valueType string) (any, error) {
 	case common.ValueTypeFloat32:
 		if f, ok := toFloat64(val); ok {
 			if f < -math.MaxFloat32 || f > math.MaxFloat32 {
-				return nil, fmt.Errorf("overflow: %v not in float32 range", f)
+				return nil, fmt.Errorf("coerceTo overflow: %v not in float32 range", f)
 			}
 			return float32(f), nil
 		}
@@ -363,24 +382,23 @@ func coerceTo(val any, valueType string) (any, error) {
 		case []byte:
 			return x, nil
 		case string:
-			// 允许 hex 字符串
 			b, err := hex.DecodeString(x)
 			if err != nil {
-				return nil, fmt.Errorf("parse %q as hex []byte: %w", x, err)
+				return nil, fmt.Errorf("coerceTo parse %q as hex []byte: %w", x, err)
 			}
 			return b, nil
 		}
 		return nil, typeErr(val, "[]byte")
 	}
 
-	return nil, fmt.Errorf("unsupported ValueType %q", valueType)
+	return nil, fmt.Errorf("coerceTo unsupported ValueType %q", valueType)
 }
 
 func typeErr(v any, want string) error {
 	return fmt.Errorf("type %T not compatible with %s", v, want)
 }
 
-// 帮助：把 any 转成 int64 / uint64 / float64（支持 string / JSON 反序列化常见类型）
+// 类型转换
 func toInt64(v any) (int64, bool) {
 	switch x := v.(type) {
 	case int:

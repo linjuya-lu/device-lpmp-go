@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// 单个设备条目
+// 设备与模型
 type DeviceEntry struct {
 	Name        string `yaml:"name"`
 	ProfileName string `yaml:"profileName"`
@@ -30,7 +30,7 @@ type ResourceProperty struct {
 	DefaultValue string `yaml:"defaultValue"`
 }
 
-// 单个资源条目
+// 设备资源
 type DeviceResource struct {
 	Name        string           `yaml:"name"`
 	IsHidden    bool             `yaml:"isHidden"`
@@ -46,11 +46,11 @@ type profileYAML struct {
 var (
 	Mu           sync.RWMutex
 	resourcesMap = make(map[string][]DeviceResource)
-	// 资源表，key: 设备名称 → (资源名称 → value)
+	// 资源表  设备名称 → (资源名称 → value)
 	ValuesMap = make(map[string]map[string]interface{})
 )
 
-// 字符串转换为对应类型
+// 字符串类型转换
 func parseDefaultValue(valStr, vt string) interface{} {
 	switch vt {
 	case "Float32":
@@ -83,9 +83,9 @@ func parseDefaultValue(valStr, vt string) interface{} {
 	return valStr
 }
 
-// 初始化资源定义及默认值：
+// 资源初始化
 func InitDeviceResources(devicesPath, profilesDir string) error {
-	// 读取和解析 devices.yaml
+	// 读取并解析文件
 	raw, err := os.ReadFile(devicesPath)
 	if err != nil {
 		return fmt.Errorf("无法读取设备列表文件 %s：%w", devicesPath, err)
@@ -96,7 +96,7 @@ func InitDeviceResources(devicesPath, profilesDir string) error {
 	}
 	Mu.Lock()
 	defer Mu.Unlock()
-	// 加载静态资源和默认值
+	// 初始化资源
 	for _, entry := range devs.DeviceList {
 		profileFile := filepath.Join(profilesDir, entry.ProfileName+".yaml")
 		rawProfile, err := os.ReadFile(profileFile)
@@ -116,7 +116,7 @@ func InitDeviceResources(devicesPath, profilesDir string) error {
 	return nil
 }
 
-// 获取设备资源定义
+// 获取设备资源
 func GetDeviceResources(deviceName string) ([]DeviceResource, bool) {
 	Mu.RLock()
 	defer Mu.RUnlock()
@@ -165,7 +165,7 @@ func GetDeviceValues(deviceName string) (map[string]interface{}, bool) {
 func DeviceInit(deviceName, resourceName, defaultValue, valueType string) error {
 	Mu.Lock()
 	defer Mu.Unlock()
-	// 检查映射存在
+	// 映射是否存在
 	if _, exists := ValuesMap[deviceName]; !exists {
 		ValuesMap[deviceName] = make(map[string]interface{})
 	}
@@ -175,7 +175,7 @@ func DeviceInit(deviceName, resourceName, defaultValue, valueType string) error 
 	return nil
 }
 
-// 删除所有资源
+// 删除设备资源
 func DeleteDeviceValues(deviceName string) error {
 	Mu.Lock()
 	defer Mu.Unlock()

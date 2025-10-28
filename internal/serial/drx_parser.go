@@ -54,7 +54,7 @@ var DrxChan = make(chan []byte, 100)
 // TOP原始行通道
 var TopoChan = make(chan string, 100)
 
-// AT指令解析
+// Lora初步解析
 func StartSerialScanner(port io.Reader) {
 	go func() {
 		reader := bufio.NewReader(port)
@@ -66,7 +66,7 @@ func StartSerialScanner(port io.Reader) {
 			rawLine, err := reader.ReadString('\n')
 			if err != nil {
 				if errors.Is(err, syscall.EINTR) {
-					continue // 被信号中断，重试
+					continue
 				}
 				if err != io.EOF {
 					log.Printf("串口读取出错: %v", err)
@@ -85,25 +85,20 @@ func StartSerialScanner(port io.Reader) {
 			// TOP处理
 			switch {
 			case strings.HasPrefix(line, "+TOP:"):
-				// 收到块头
 				collectingTopo = true
 				topoBuf.Reset()
-				// 取payload
 				parts := strings.SplitN(line[len("+TOP:"):], ",", 3)
 				if len(parts) >= 3 {
 					topoBuf.WriteString(parts[2])
 				}
 			case collectingTopo && line == "OK":
-				// 尾部OK，完成一块
 				block := "+TOP:" + topoBuf.String() + "OK"
 				TopoChan <- block
 				collectingTopo = false
 			case collectingTopo:
-				// 中间续行
 				payload := strings.TrimSuffix(line, ",")
 				topoBuf.WriteString("," + payload)
 			default:
-				// 既非 +DRX: 也非 TOP 块中的行，忽略
 			}
 		}
 		close(TopoChan)

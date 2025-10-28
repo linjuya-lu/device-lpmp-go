@@ -13,14 +13,266 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
+// deviceName: 设备名
+// sourceName: 资源名
+// resourceNames: 数据值列表
 type CallbackFunc func(deviceName, sourceName string, values map[string]interface{})
 
-// 业务报文解析
+const (
+	EIDWaterLevel   = "238A0821BEF2" // 水位传感器
+	EIDTempHumidity = "238A0821BF34" // 温湿度传感器
+)
+
+// 特殊传感器解析
+var sensorParsers = map[string]func(frame []byte, deviceName string, cb CallbackFunc) error{
+	EIDWaterLevel:   parseWaterLevel,
+	EIDTempHumidity: parseTempHumidity,
+}
+
+func remapType1(feature byte, code uint16) (byte, uint16) {
+	if feature == 0b000 {
+		switch code {
+		case 0b00010100011: // 8
+			return 0b011, 0b00000000100 // 5
+		case 0b00000001001: // 9
+			return 0b001, 0b00000111 // feature->1, code->7
+		case 0b00000000011: // 3
+			return feature, 0b00011110 // 30
+		case 0b00000000010: // 2
+			return feature, 0b00011101 // 29
+		case 0b00000000100: // 4
+			return feature, 0b00011111 // 31
+		}
+	}
+	return feature & 0x07, code & 0x7FF
+}
+
+func parseWaterLevel(frame []byte, deviceName string, cb CallbackFunc) error {
+	// 头部解析
+	head := frame[6]
+	dataCount := int(head >> 4)
+	fragInd := (head >> 3) & 0x1
+	packetType := head & 0x07
+
+	if fragInd != 0 {
+		return nil
+	}
+	if !(packetType == 0 || packetType == 2) {
+		return nil
+	}
+
+	idx := 7
+	parsed := 0
+	resourceValues := make(map[string]interface{})
+
+	for parsed < dataCount {
+		if idx+2 > len(frame)-2 {
+			return fmt.Errorf("param header OOB")
+		}
+		head16 := binary.LittleEndian.Uint16(frame[idx : idx+2])
+		idx += 2
+
+		paramType := head16 >> 2
+		lenFlag := uint8(head16 & 0x3)
+		feature := byte((paramType >> 11) & 0x07)
+		code := paramType & 0x7FF
+
+		feature, code = remapType1(feature, code)
+
+		paramTypeAdj := (uint16(feature)&0x7)<<11 | (code & 0x7FF)
+		var dataLen uint32
+		switch lenFlag {
+		case 0:
+			dataLen = 4
+		case 1:
+			if idx+1 > len(frame)-2 {
+				return fmt.Errorf("lenFlag=1 OOB")
+			}
+			dataLen = uint32(frame[idx])
+			idx++
+		case 2:
+			if idx+2 > len(frame)-2 {
+				return fmt.Errorf("lenFlag=2 OOB")
+			}
+			dataLen = uint32(binary.LittleEndian.Uint16(frame[idx : idx+2]))
+			idx += 2
+		case 3:
+			if idx+3 > len(frame)-2 {
+				return fmt.Errorf("lenFlag=3 OOB")
+			}
+			dataLen = uint32(frame[idx])<<16 | uint32(frame[idx+1])<<8 | uint32(frame[idx+2])
+			idx += 3
+		default:
+			return fmt.Errorf("invalid lenFlag")
+		}
+
+		if idx+int(dataLen) > len(frame)-2 {
+			return fmt.Errorf("data OOB paramType=0x%X", paramType)
+		}
+		valBytes := frame[idx : idx+int(dataLen)]
+		idx += int(dataLen)
+
+		if info, ok := config.LookupParamInfo(paramTypeAdj); ok {
+			val, err := info.Parse(valBytes)
+			if err != nil {
+				log.Printf("参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
+			} else {
+				if val != nil {
+					config.SetDeviceValue(deviceName, info.Name, val)
+					resourceValues[info.Name] = val
+					log.Printf("写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+				}
+			}
+		} else {
+			log.Printf("未找到参数类型信息 type=0x%X", paramType)
+		}
+
+		parsed++
+	}
+	// 解析完成，调用回调
+	fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
+
+	cb(deviceName, "AsyncData", resourceValues)
+	if len(resourceValues) > 0 {
+		log.Printf("%s parsed=%d resources=%v", deviceName, parsed, resourceValues)
+	}
+	return nil
+}
+
+func remapType(feature byte, code uint16) (byte, uint16) {
+	if feature == 0b000 {
+		switch code {
+		case 0b00000001000: // 8
+			return feature, 0b00000000101 // 5
+		case 0b00000001001: // 9
+			return 0b001, 0b00000111 // feature->1, code->7
+		case 0b00000000011: // 3
+			return feature, 0b00011110 // 30
+		case 0b00000000010: // 2
+			return feature, 0b00011101 // 29
+		case 0b00000000100: // 4
+			return feature, 0b00011111 // 31
+		}
+	}
+	return feature & 0x07, code & 0x7FF
+}
+
+func parseTempHumidity(frame []byte, deviceName string, cb CallbackFunc) error {
+
+	// 头部解析
+	head := frame[6]
+	dataCount := int(head >> 4)
+	fragInd := (head >> 3) & 0x1
+	packetType := head & 0x07
+
+	if fragInd != 0 {
+		return nil
+	}
+	if !(packetType == 0 || packetType == 2) {
+		return nil
+	}
+
+	// 参数解析循环
+	idx := 7
+	parsed := 0
+	resourceValues := make(map[string]interface{})
+
+	for parsed < dataCount {
+		if idx+2 > len(frame)-2 {
+			return fmt.Errorf("param header OOB")
+		}
+		head16 := binary.LittleEndian.Uint16(frame[idx : idx+2])
+		idx += 2
+
+		paramType := head16 >> 2       // 14bit类型码
+		lenFlag := uint8(head16 & 0x3) // 2bit长度指示
+		feature := byte((paramType >> 11) & 0x07)
+		code := paramType & 0x7FF
+
+		feature, code = remapType(feature, code)
+
+		paramTypeAdj := (uint16(feature)&0x7)<<11 | (code & 0x7FF)
+
+		// 计算数据长度
+		var dataLen uint32
+		switch lenFlag {
+		case 0:
+			dataLen = 4
+		case 1:
+			if idx+1 > len(frame)-2 {
+				return fmt.Errorf("lenFlag=1 OOB")
+			}
+			dataLen = uint32(frame[idx])
+			idx++
+		case 2:
+			if idx+2 > len(frame)-2 {
+				return fmt.Errorf("lenFlag=2 OOB")
+			}
+			dataLen = uint32(binary.LittleEndian.Uint16(frame[idx : idx+2]))
+			idx += 2
+		case 3:
+			if idx+3 > len(frame)-2 {
+				return fmt.Errorf("lenFlag=3 OOB")
+			}
+			dataLen = uint32(frame[idx])<<16 | uint32(frame[idx+1])<<8 | uint32(frame[idx+2])
+			idx += 3
+		default:
+			return fmt.Errorf("invalid lenFlag")
+		}
+
+		// 数据边界检查
+		if idx+int(dataLen) > len(frame)-2 {
+			return fmt.Errorf("data OOB paramType=0x%X", paramType)
+		}
+		valBytes := frame[idx : idx+int(dataLen)]
+		idx += int(dataLen)
+
+		// 按配置解析参数
+		if info, ok := config.LookupParamInfo(paramTypeAdj); ok {
+			val, err := info.Parse(valBytes)
+			if err != nil {
+				log.Printf("参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
+			} else {
+				if val != nil {
+					config.SetDeviceValue(deviceName, info.Name, val)
+					resourceValues[info.Name] = val
+					log.Printf(" 写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+				}
+			}
+		} else {
+			log.Printf("未找到参数类型信息 type=0x%X", paramType)
+		}
+		parsed++
+	}
+	// 解析完成，调用回调
+	fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
+
+	cb(deviceName, "AsyncData", resourceValues)
+
+	if len(resourceValues) > 0 {
+		log.Printf("%s parsed=%d resources=%v", deviceName, parsed, resourceValues)
+	}
+	return nil
+}
+
+type ParserWithCB func([]byte, string, CallbackFunc) error
+
+// 捕获panic
+func safeCallParser(p ParserWithCB, frame []byte, deviceName string, cb CallbackFunc) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in parser: %v", r)
+		}
+	}()
+	return p(frame, deviceName, cb)
+}
+
+// LORA协议解析
 func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 	go func() {
 		for frame := range frameCh {
 			fmt.Printf("Received frame (%d bytes): % X\n", len(frame), frame)
-			// 最小长度校验
+			// 长度校验
 			if len(frame) < 9 {
 				log.Println("帧长度不足，跳过解析")
 				continue
@@ -28,20 +280,33 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			// CRC 校验
 			payload := frame[:len(frame)-2]
 			recvCRC := binary.BigEndian.Uint16(frame[len(frame)-2:])
-			// EID
+			// 解析EID
 			sidBytes := frame[0:6]
 			sensorID := strings.ToUpper(hex.EncodeToString(sidBytes))
 			deviceName, hasDevice := config.LookupDeviceName(sensorID)
 			if !hasDevice {
+				log.Printf("EID映射表 key: %#v", config.SensorIDToDeviceName)
+
+				log.Printf(">>[%s]<<", sensorID)
+
 				log.Printf("未知 EID=%s，跳过本帧", sensorID)
 				continue
 			}
+			//更新维护时间
 			onDataReceived(deviceName)
+			// 是否特殊处理
+			if parser, ok := sensorParsers[sensorID]; ok {
+				if err := safeCallParser(parser, frame, deviceName, cb); err != nil {
+					log.Printf("EID=%s 专用解析失败: %v", sensorID, err)
+				}
+				continue
+			}
+
 			// 头部
 			head := frame[6]
-			dataCount := int(head >> 4)  // 参量个数
-			fragInd := (head >> 3) & 0x1 // 分片指示
-			packetType := head & 0x07    // 报文类型
+			dataCount := int(head >> 4)
+			fragInd := (head >> 3) & 0x1
+			packetType := head & 0x07
 			body := make([]byte, len(frame)-2-7)
 			copy(body, frame[7:len(frame)-2])
 			if CRC16(payload) != recvCRC {
@@ -69,7 +334,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				Check:      recvCRC,
 			}
 			if fragInd == 0 {
-				// 非分片帧
+				// 非分片帧：只处理业务或控制报文
 				switch packetType {
 				case 0:
 					SendDataStatus(sensorID, 0b001, 0xFF, byte(dataCount))
@@ -81,18 +346,15 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					// 控制报文响应
 					handleFrameCtl(frame_ctl)
 					if config.ResourcesFlag {
-						cb(deviceName, "AsyncReporting", config.Resources1)
+						cb(deviceName, "AsyncData", config.Resources1)
 						config.ResourcesFlag = false
 					}
 					continue
 				default:
-					// 非分片帧，不处理
 					continue
 				}
 			} else {
-				// 分片帧
 			}
-			// CRC
 			idx := 7
 			parsed := 0
 			resourceValues := make(map[string]interface{})
@@ -106,7 +368,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				idx += 2
 				paramType := head16 >> 2       // 14bit类型码
 				lenFlag := uint8(head16 & 0x3) // 2bit长度指示
-				// 计算真实数据长度
+				// 数据长度
 				var dataLen uint32
 				switch lenFlag {
 				case 0:
@@ -121,8 +383,7 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					dataLen = uint32(frame[idx])<<16 | uint32(frame[idx+1])<<8 | uint32(frame[idx+2])
 					idx += 3
 				}
-
-				// 原始值字节
+				// 提取原始值字节
 				log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
 
 				valBytes := frame[idx : idx+int(dataLen)]
@@ -133,9 +394,12 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					if err != nil {
 						log.Printf("参数 %s.%s 解析失败: %v", deviceName, info.Name, err)
 					} else {
-						config.SetDeviceValue(deviceName, info.Name, val)
-						resourceValues[info.Name] = val
-						log.Printf("写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+						// 写入运行时值表
+						if val != nil {
+							config.SetDeviceValue(deviceName, info.Name, val)
+							resourceValues[info.Name] = val
+							log.Printf("写入值 %s.%s = %v %s", deviceName, info.Name, val, info.Unit)
+						}
 					}
 				} else {
 					log.Printf("未找到参数类型信息 type=0x%X", paramType)
@@ -145,30 +409,34 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 			log.Printf("[DEBUG] parsed=%d dataCount=%d len(resourceValues)=%d cb=%v",
 				parsed, dataCount, len(resourceValues), cb != nil)
 
+			// 解析完成，调用回调
 			fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
 
 			if cb != nil && len(resourceValues) > 0 {
-				cb(deviceName, "AsyncReporting", resourceValues)
+				cb(deviceName, "AsyncData", resourceValues)
 			}
-
+			if parsed < dataCount {
+				continue
+			}
 		}
 	}()
 }
 
-// 发送监测数据响应报文
+// 监测数据响应报文
 func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
-	var eidStr = "238A0841D828"
-	keyBytes, err := hex.DecodeString(eidStr)
+
+	// EID
+	keyBytes, err := hex.DecodeString(config.EidStr)
 	if err != nil {
 		return errors.New("invalid sensorKey hex: " + err.Error())
 	}
 	if len(keyBytes) != 6 {
 		return errors.New("sensorKey hex must decode to 6 bytes")
 	}
-	// 构造 Header
+	//头
 	const fragInd = 0
 	header := (dataLen<<4)&0xF0 | (fragInd<<3)&0x08 | (packetType & 0x07)
-	// 拼接帧：SensorID + Header + Data_Status
+	//拼接
 	packet := make([]byte, 0, len(keyBytes)+1+1+2)
 	packet = append(packet, keyBytes...)
 	packet = append(packet, header)
@@ -181,6 +449,7 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	return nil
 }
 
+// 写入时间戳（纳秒）
 func onDataReceived(deviceName string) {
 	ts := time.Now().UnixNano()
 	config.SetDeviceValue(deviceName, "LastDataTs", ts)

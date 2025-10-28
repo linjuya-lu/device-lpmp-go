@@ -33,10 +33,9 @@ func (f *Frame) Bytes() []byte {
 }
 
 type ResponseKey struct {
-	// 控制报文类型
-	CtrlType uint8
-	// 参数配置类型标识
-	RequestSetFlag bool
+	CtrlType uint8 // 控制报文类型
+
+	RequestSetFlag bool // 参数配置类型标识
 }
 
 type ResponseHandle struct {
@@ -181,11 +180,10 @@ func resetCommands(data []byte, frameCtl Frame) error {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
 		return err
 	}
-	eidStr := "238A0841D828"
 	// 解码成 6 字节
-	eidBytes, err := hex.DecodeString(eidStr)
+	eidBytes, err := hex.DecodeString(EidStr)
 	if err != nil {
-		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", eidStr, err)
+		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", EidStr, err)
 		return err
 	}
 	if len(eidBytes) != 6 {
@@ -199,7 +197,7 @@ func resetCommands(data []byte, frameCtl Frame) error {
 	ts := uint32(time.Now().In(loc).Unix()) // 当前时间转为世纪秒
 
 	// 发送命令
-	eidStr, _ = eidValue.(string)
+	eidStr, _ := eidValue.(string)
 	RestCommandBuildFrame(eidStr, sensorID, 1, ts)
 
 	return nil

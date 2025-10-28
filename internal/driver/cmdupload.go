@@ -9,10 +9,8 @@ import (
 )
 
 func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values map[string]interface{}) {
-	d.lc.Infof("[AsyncReporting] values=%#v", values)
-
 	if len(values) == 0 {
-		d.lc.Infof("AsyncReporting: 没有要上报的值")
+		d.lc.Debugf("异步上传没有要上报的值")
 		return
 	}
 
@@ -20,28 +18,22 @@ func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values
 	origin := time.Now().UnixNano()
 
 	for name, val := range values {
-		d.lc.Infof("[AsyncReporting] processing: name=%s type=%T value=%v", name, val, val)
+		d.lc.Infof("一次异步上传: 设备=%s 资源=%s  值=%v", deviceName, name, val)
 
 		var cv *dsModels.CommandValue
 		var err error
 
 		switch v := val.(type) {
-		case int8:
-			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt8, v)
-		case uint8:
-			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint8, v)
 		case int16:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt16, v)
-		case uint16:
-			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint16, v)
 		case int32:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt32, v)
-		case uint32:
-			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint32, v)
 		case int64:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeInt64, v)
-		case uint64:
-			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint64, v)
+		case uint8:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint8, v)
+		case uint16:
+			cv, err = dsModels.NewCommandValue(name, common.ValueTypeUint16, v)
 		case float32:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeFloat32, v)
 		case float64:
@@ -49,12 +41,12 @@ func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values
 		case string:
 			cv, err = dsModels.NewCommandValue(name, common.ValueTypeString, v)
 		default:
-			d.lc.Infof("不支持的类型: %T", v)
+			d.lc.Infof("异步上传 不支持的类型: %T", v)
 			continue
 		}
 
 		if err != nil {
-			d.lc.Infof("NewCommandValue(%s) 失败: %v", name, err)
+			d.lc.Errorf("异步上传 值类型(%s) 错误: %v", name, err)
 			continue
 		}
 		cv.Origin = origin
@@ -62,22 +54,36 @@ func (d *LpMpDriver) AsyncReporting(deviceName string, sourceName string, values
 	}
 
 	if len(cvs) == 0 {
-		d.lc.Infof("AsyncReporting: 没有有效的 CommandValue，跳过上报")
+		d.lc.Warnf("异步上传: 没有有效值，跳过上报")
 		return
 	}
 
-	// 封装 AsyncValues
 	asyncValues := &dsModels.AsyncValues{
 		DeviceName:    deviceName,
 		SourceName:    sourceName,
 		CommandValues: cvs,
 	}
 
-	// 推送到 SDK 异步通道
 	d.asyncCh <- asyncValues
-
-	d.lc.Infof("AsyncValues pushed: device=%s source=%s count=%d",
+	d.lc.Infof("异步值上传: 设备=%s 通道=%s 数量=%d",
 		deviceName, sourceName, len(cvs))
+}
+
+func snapshotValuesMap() map[string]map[string]interface{} {
+	snap := make(map[string]map[string]interface{}, len(config.ValuesMap))
+	config.Mu.RLock()
+	for dev, res := range config.ValuesMap {
+		if res == nil {
+			continue
+		}
+		cp := make(map[string]interface{}, len(res))
+		for k, v := range res {
+			cp[k] = v
+		}
+		snap[dev] = cp
+	}
+	config.Mu.RUnlock()
+	return snap
 }
 
 // 心跳上传
@@ -87,22 +93,22 @@ func (d *LpMpDriver) StartAsyncReporter() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			config.Mu.RLock()
-			for deviceName, resMap := range config.ValuesMap {
+
+			snapshot := snapshotValuesMap()
+
+			for deviceName, resMap := range snapshot {
 				if resMap == nil {
 					continue
 				}
-
-				stateVal, ok := resMap["state"]
+				stateVal, ok := resMap["heatbeat"]
 				if !ok {
 					continue
 				}
 				values := map[string]interface{}{
-					"state": stateVal,
+					"heatbeat": stateVal,
 				}
-				d.AsyncReporting(deviceName, "hBeat", values)
+				d.AsyncReporting(deviceName, "Heartbeat", values)
 			}
-			config.Mu.RUnlock()
 		}
 	}()
 }

@@ -65,45 +65,37 @@ func SendFrame(dstAddr string, payload []byte) {
 		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
 	hexStr := strings.Join(parts, "") // 合并字符串
-	// AT 命令
-	cmd := fmt.Sprintf("\rAT+DTX=%s,%s\r\n", dstAddr, hexStr)
 	// 调试
-	fmt.Printf(">> Sending AT command: %s", cmd)
+	cmd := fmt.Sprintf("\rAT+DTX=%s,%s\r\n", dstAddr, hexStr)
+	fmt.Printf(" 发送AT命令: %s", cmd)
 	// 发送
 	WriteChan <- []byte(cmd)
 }
 
 func RestCommandBuildFrame(eidStr string, sensorID [6]byte, requestSetFlag byte, timestamp uint32) error {
 	if requestSetFlag != 0 && requestSetFlag != 1 {
-		return fmt.Errorf("invalid requestSetFlag %d, must be 0 or 1", requestSetFlag)
+		return fmt.Errorf("传参错误 %d, must be 0 or 1", requestSetFlag)
 	}
 
-	// 预分配：6B SensorID + 1B head + 1B ctrl + 4B ts + 2B CRC
 	buf := make([]byte, 0, 6+1+1+4+2)
-
-	// SensorID
+	// EID
 	buf = append(buf, sensorID[:]...)
-
-	// head：DataLen(4b=0) | FragInd(1b=0)<<3 | PacketType(3b)
+	// 头
 	head := byte(0<<4) | byte(0<<3) | byte(0x04&0x07)
 	buf = append(buf, head)
-
-	// CtrlType+RequestSetFlag：7b ctrlType<<1 | 1b flag
+	// 控制字段
 	ctrlByte := byte((0x04&0x7F)<<1) | (requestSetFlag & 0x01)
 	buf = append(buf, ctrlByte)
-
-	// Timestamp(4字节)
+	// 时间戳
 	tsBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(tsBytes, timestamp) // 如果协议是小端
+	binary.LittleEndian.PutUint32(tsBytes, timestamp)
 	buf = append(buf, tsBytes...)
-
-	// CRC16 校验位（大端序）
+	// CRC16
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)
-
-	// 发送帧（这里调用 serial.SendFrame）
+	// 发送
 	SendFrame(eidStr, buf)
 
 	return nil

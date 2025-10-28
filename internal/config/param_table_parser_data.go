@@ -7,8 +7,8 @@ import (
 )
 
 type ParamKey struct {
-	FeatureBits byte   // 高3位（参量特征）
-	CodeBits    uint16 // 低11位（类型编码）
+	FeatureBits byte   // 参量特征
+	CodeBits    uint16 // 类型编码
 }
 
 type ParamInfo struct {
@@ -29,12 +29,13 @@ var paramMap = map[ParamKey]ParamInfo{
 	{0b000, 0b00000000101}: {"Temp", "℃", 4, "float32", parseFloat32},
 	{0b000, 0b00000000110}: {"AmountOfSubstance", "mol", 4, "float32", parseFloat32},
 	{0b000, 0b00000000111}: {"LuminousIntensity", "cd", 4, "float32", parseFloat32},
-
+	//拓扑解析
+	{0b000, 0b00000001000}: {"resourceTopologyDiagram", "", -1, "", parseTopo},
 	// 状态量 & 扩展
 	{0b000, 0b00000011100}: {"HeartbeatStatus", "", 1, "uint8", parseUint8},
 	{0b000, 0b00000011101}: {"BatteryRemaining", "%", 2, "uint16", parseUint16},
 	{0b000, 0b00000011110}: {"BatVolt", "V", 4, "float32", parseFloat32},
-	{0b000, 0b00000011111}: {"SensorSelfTestStatus", "", 1, "uint8", parseUint8},
+	{0b000, 0b00000011111}: {"heatbeat", "", 1, "uint8", parseUint8},
 	{0b000, 0b00000100000}: {"NetworkConnectionStatus", "", 1, "uint8", parseUint8},
 	{0b000, 0b00000100001}: {"PowerStatus", "", 1, "uint8", parseUint8},
 	{0b000, 0b00000100010}: {"DataCollectionInterval", "s", 2, "uint16", parseUint16},
@@ -101,8 +102,10 @@ var paramMap = map[ParamKey]ParamInfo{
 	// 6 母线电压采集相位
 	{0b010, 0b00000000110}: {"BusVoltageSamplingPhase", "°", 4, "float32", parseFloat32},
 	//变压器铁芯电流传感器
-	// 27 变压器铁芯/夹件接地电流
-	{0b010, 0b00000011011}: {"TransformerCoreClipGroundingCurrent", "A", 4, "float32", parseFloat32},
+	// 铁芯接地电流
+	{0b010, 0b00000011011}: {"CGAmp", "A", 4, "float32", parseFloat32},
+	// 夹件接地电流值
+	{0b010, 0b0000100011}: {"ClpGAmp", "A", 4, "float32", parseFloat32},
 	// 28 变压器铁芯/夹件接地电流频谱
 	{0b010, 0b00000011100}: {"TransformerCoreClipGroundingCurrentSpectrum", "A", -1, "uint16[]", parseUint16Array},
 	//套管等容性设备传感器
@@ -316,7 +319,6 @@ func LookupParamInfo(paramType uint16) (ParamInfo, bool) {
 
 // ===================== 通用解析函数 =====================
 
-// 通用解析函数
 func parseFloat32(data []byte) (any, error) {
 	if len(data) != 4 {
 		return nil, fmt.Errorf("期望4字节，实际%d", len(data))
@@ -347,9 +349,7 @@ func parseUint32(data []byte) (any, error) {
 	return binary.LittleEndian.Uint32(data), nil
 }
 
-// 数组解析
 func parsefloat32Array(data []byte) (any, error) {
-	// 数据长度应为 4*N
 	if len(data)%4 != 0 {
 		return nil, fmt.Errorf("波形数据长度非4的倍数: %d", len(data))
 	}
@@ -362,9 +362,7 @@ func parsefloat32Array(data []byte) (any, error) {
 	return samples, nil
 }
 
-// 数组解析
 func parseUint16Array(data []byte) (any, error) {
-	// 数据长度应为 2*N
 	if len(data)%2 != 0 {
 		return nil, fmt.Errorf("uint16 数组数据长度非2的倍数: %d", len(data))
 	}
@@ -383,4 +381,9 @@ func parseInt16(data []byte) (any, error) {
 	u := binary.LittleEndian.Uint16(data)
 	val := int16(u)
 	return val, nil
+}
+
+func parseTopo(data []byte) (any, error) {
+	fmt.Printf("有线汇聚，拓扑不由汇聚网关上传/n")
+	return nil, nil
 }
