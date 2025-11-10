@@ -1,9 +1,8 @@
 package config
 
-// 写入通道
-var WriteChan = make(chan []byte, 100)
-
 var (
+	//写入通道
+	WriteChan = make(chan []byte, 100)
 	//接入节点EID
 	EidStr = "238A0841D828"
 	//资源路径

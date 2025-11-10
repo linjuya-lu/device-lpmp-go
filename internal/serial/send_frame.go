@@ -10,7 +10,7 @@ import (
 
 func WriteFrame(port io.ReadWriteCloser, frame []byte) error {
 	payload := string(frame)
-	fmt.Printf(">> 发送字符串: %q\n", payload)
+	fmt.Printf("发送字符串: %q\n", payload)
 	n, err := port.Write([]byte(payload))
 	if err != nil {
 		return fmt.Errorf("写入串口失败：%w", err)

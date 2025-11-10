@@ -5,7 +5,6 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
@@ -19,10 +18,7 @@ func SendTopoQuery(startIndex, numOfQuery int) {
 }
 
 var (
-	TopoList    []config.NodeTopology
-	topoIndex   = map[string]int{}  // EID -> index
-	topoLastAt  time.Time           // 最近合并时间
-	topoIdleTTL = 600 * time.Second // 超过这个空闲视为新一轮
+	TopoList []config.NodeTopology
 
 	topoMu sync.RWMutex
 )
@@ -139,8 +135,7 @@ func ClearTopo() (prev int) {
 	topoMu.Lock()
 	prev = len(TopoList)
 	TopoList = TopoList[:0] // 只清长度，保留容量
-	topoIndex = make(map[string]int)
-	topoLastAt = time.Time{} // 清掉时间戳
+
 	topoMu.Unlock()
 	return
 }

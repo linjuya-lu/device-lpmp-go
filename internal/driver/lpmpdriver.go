@@ -4,7 +4,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,20 +43,29 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.sdk = sdk
 	d.lc = sdk.LoggingClient()
 	d.asyncCh = sdk.AsyncValuesChannel()
-
 	return nil
 }
 
 func (d *LpMpDriver) Start() error {
-	// 初始化
-	if err := config.InitDeviceResources(config.DevicesYAML, config.ProfilesDir); err != nil {
-		return fmt.Errorf("初始化设备资源失败: %w", err)
+	//配置文件下发
+	if err := d.sdk.AddCustomRoute(
+		"/custom/load-param-map",
+		interfaces.Unauthenticated,
+		d.handleLoadParamMap,
+		http.MethodPost,
+	); err != nil {
+		return fmt.Errorf("register route failed: %w", err)
 	}
+	// 初始化
+	if err := InitDeviceValues(d.sdk); err != nil {
+		return fmt.Errorf("Start 初始化设备资源失败: %w", err)
+	}
+	config.UpdateSensorMapping()
+
 	serialPort, err := serial.Open(config.PortName, config.BaudRate)
 	if err != nil {
 		return fmt.Errorf("打开串口 %s 失败: %w", config.PortName, err)
 	}
-	config.UpdateSensorMapping()
 	// Lora解析
 	serial.StartSerialScanner(serialPort)
 	frameparser.StartParser(serial.DrxChan, d.AsyncReporting)
@@ -81,7 +92,9 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
 		// 请求路由
-		if resName == "resourceTopologyDiagram" {
+		if resName == "topo" {
+			serial.ClearTopo()
+			serial.SendTopoQuery(0, 10)
 			topo := serial.GetTopoList()
 			fmt.Printf("拓扑路由:%s", topo)
 			cv, cerr := dsModels.NewCommandValue(
@@ -96,7 +109,7 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			continue
 		}
 		// 时间查询
-		if resName == "cmdTimeParamQry" {
+		if resName == "timeQuery" {
 			if err := d.handleTimeParameterSet(deviceName); err != nil {
 				return nil, err
 			}
@@ -107,8 +120,8 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			res = append(res, cv)
 			continue
 		}
-		// 复位设置
-		if resName == "cmdReSet" {
+		// 复位
+		if resName == "reset" {
 			if err := d.handleResetCommand(deviceName); err != nil {
 				return nil, err
 			}
@@ -119,8 +132,8 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			res = append(res, cv)
 			continue
 		}
-		// 时间设置
-		if resName == "cmdTimeParamSet" {
+		// 时间同步
+		if resName == "timeSync" {
 			if err := d.handleTimeParameterSet(deviceName); err != nil {
 				return nil, err
 			}
@@ -132,22 +145,10 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			continue
 		}
 		// 工况查询
-		if resName == "cmdOperDataQ" {
+		if resName == "operStatus" {
 			if err := d.handleIdMoniDataQuery(deviceName); err != nil {
 				return nil, err
 			}
-			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
-			if cerr != nil {
-				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
-			}
-			res = append(res, cv)
-			continue
-		}
-		// 拓扑查询
-		if resName == "cmdTopoDiagQry" {
-			serial.ClearTopo()
-
-			serial.SendTopoQuery(0, 10)
 			cv, cerr := dsModels.NewCommandValue(resName, common.ValueTypeString, "发送成功")
 			if cerr != nil {
 				return nil, fmt.Errorf("NewCommandValue 失败: %w", cerr)
@@ -192,20 +193,23 @@ func (d *LpMpDriver) Stop(force bool) error {
 }
 
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	d.lc.Debugf("新设备已添加: %s", deviceName)
-
+	d.lc.Debugf("添加设备: %s", deviceName)
+	//添加EID
+	if eid, ok := extractEID(protocols); ok {
+		config.AddMapping(eid, deviceName)
+	} else {
+		d.lc.Warnf("设备 %s 未提供 LoRa.eid", deviceName)
+	}
+	//初始资源
 	dev, err := d.sdk.GetDeviceByName(deviceName)
 	if err != nil {
 		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
 	}
-
 	profileName := dev.ProfileName
-
 	prof, err := d.sdk.GetProfileByName(profileName)
 	if err != nil {
 		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
 	}
-
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
@@ -213,14 +217,20 @@ func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.Pr
 		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
 			return fmt.Errorf("初始化设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
-		d.lc.Debugf("已将设备 %s 的资源 %s 初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+		d.lc.Debugf("已将设备 %s 的资源 %s 初始化: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 	}
 	return nil
 }
 
 func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	d.lc.Debugf("Device %s is updated", deviceName)
-
+	d.lc.Debugf("更新设备 %s", deviceName)
+	//更新EID
+	if eid, ok := extractEID(protocols); ok {
+		config.UpdateMapping(eid, deviceName)
+	} else {
+		d.lc.Warnf("设备 %s 未提供 LoRa.eid", deviceName)
+	}
+	//更新资源
 	dev, err := d.sdk.GetDeviceByName(deviceName)
 	if err != nil {
 		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
@@ -237,26 +247,32 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
 			return fmt.Errorf("更新设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
-		d.lc.Debugf("已将设备 %s 的资源 %s 重新初始化为默认值: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+		d.lc.Debugf("已将设备 %s 的资源 %s 初始化: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 	}
 
-	d.lc.Infof("已刷新设备 %s 的资源值为最新默认配置", deviceName)
+	d.lc.Infof("刷新设备 %s 的资源值", deviceName)
 	return nil
 }
 
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
-	d.lc.Debugf("Device %s is removed", deviceName)
-
+	d.lc.Debugf("移除设备： %s", deviceName)
+	//移除EID
+	if eid, ok := extractEID(protocols); ok {
+		config.DeleteMapping(eid)
+	} else {
+		d.lc.Warnf("设备 %s 未提供 LoRa.eid", deviceName)
+	}
+	//删除资源
 	if err := config.DeleteDeviceValues(deviceName); err != nil {
-		d.lc.Errorf("删除设备 %s 的运行时值失败: %v", deviceName, err)
-		return fmt.Errorf("删除设备 %s 的运行时值失败: %w", deviceName, err)
+		d.lc.Errorf("删除设备资源错误 %s : %v", deviceName, err)
+		return fmt.Errorf(" %s删除错误 : %w", deviceName, err)
 	}
 
 	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {
-		d.lc.Errorf("删除设备 %s 的传感器映射失败: %v", deviceName, err)
-		return fmt.Errorf("删除设备 %s 的传感器映射失败: %w", deviceName, err)
+		d.lc.Errorf("删除设备映射错误 %s : %v", deviceName, err)
+		return fmt.Errorf("删除错误 %s : %w", deviceName, err)
 	}
-	d.lc.Infof("已移除设备 %s 的所有运行时数据和映射", deviceName)
+	d.lc.Infof("成功移除 %s ", deviceName)
 	return nil
 }
 
@@ -495,4 +511,34 @@ func makeCV(name string, valueType string, val any) (*dsModels.CommandValue, err
 	}
 	cv.Origin = time.Now().UnixNano()
 	return cv, nil
+}
+
+// 提取 LoRa.eid
+func extractEID(protocols map[string]models.ProtocolProperties) (string, bool) {
+	// 找到 "lora"
+	var loraProps models.ProtocolProperties
+	for k, v := range protocols {
+		if strings.EqualFold(k, "lora") {
+			loraProps = v
+			break
+		}
+	}
+	if loraProps == nil {
+		return "", false
+	}
+
+	// 读出 eid
+	for _, key := range []string{"eid"} {
+		if val, ok := loraProps[key]; ok {
+			switch t := val.(type) {
+			case string:
+				if s := strings.TrimSpace(t); s != "" {
+					return s, true
+				}
+			default:
+				fmt.Printf("LoRa.eid 非字符串类型: %T\n", t)
+			}
+		}
+	}
+	return "", false
 }

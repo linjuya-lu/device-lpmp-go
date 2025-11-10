@@ -76,37 +76,6 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 	return nil
 }
 
-func (d *LpMpDriver) handleTimeParameterQuery(deviceName string) error {
-	// EID
-	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
-	if !ok {
-		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
-		d.lc.Error(err.Error())
-		return err
-	}
-	// 解码6字节
-	eidBytes, err := hex.DecodeString(config.EidStr)
-	if err != nil {
-		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", config.EidStr, err)
-		d.lc.Error(err.Error())
-		return err
-	}
-	if len(eidBytes) != 6 {
-		err = fmt.Errorf("EID 长度不对，期望 6 字节，实际 %d 字节", len(eidBytes))
-		d.lc.Error(err.Error())
-		return err
-	}
-	var sensorID [6]byte
-	copy(sensorID[:], eidBytes)
-	// 构建时间请求帧
-	reqFrame, _ := frameparser.BuildTimeParamFrame(sensorID, 0, 0)
-	// 发送命令
-	eidStr, _ := eidValue.(string)
-	serial.SendFrame(eidStr, reqFrame)
-	d.lc.Infof("发送时间请求帧到设备 %s (EID: %s)", deviceName, eidStr)
-	return nil
-}
-
 func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 	// EID
 	eidValue, ok := config.GetDeviceValue(deviceName, "eid")

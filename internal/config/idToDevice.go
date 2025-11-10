@@ -5,44 +5,45 @@ import (
 	"sync"
 )
 
+// EID映射
 var (
 	mu1                  sync.RWMutex
 	SensorIDToDeviceName = map[string]string{}
 )
 
-// 添加映射
+// 添加EID
 func AddMapping(sensorID, deviceName string) {
 	mu1.Lock()
 	defer mu1.Unlock()
 	SensorIDToDeviceName[sensorID] = deviceName
-	fmt.Printf("Mapping added: %s -> %s\n", sensorID, deviceName)
+	fmt.Printf("添加EID: %s -> %s\n", sensorID, deviceName)
 }
 
-// 删除映射
+// 删除EID
 func DeleteMapping(sensorID string) error {
 	mu1.Lock()
 	defer mu1.Unlock()
 	if _, ok := SensorIDToDeviceName[sensorID]; !ok {
-		return fmt.Errorf("no mapping found for SensorID %s", sensorID)
+		return fmt.Errorf("无EID %s", sensorID)
 	}
 	delete(SensorIDToDeviceName, sensorID)
-	fmt.Printf("Mapping deleted: %s\n", sensorID)
+	fmt.Printf("删除EID: %s\n", sensorID)
 	return nil
 }
 
-// 更新映射
+// 更新EID
 func UpdateMapping(sensorID, newDeviceName string) error {
 	mu1.Lock()
 	defer mu1.Unlock()
 	if _, ok := SensorIDToDeviceName[sensorID]; !ok {
-		return fmt.Errorf("no mapping found for SensorID %s", sensorID)
+		return fmt.Errorf("无EID %s", sensorID)
 	}
 	SensorIDToDeviceName[sensorID] = newDeviceName
-	fmt.Printf("Mapping updated: %s -> %s\n", sensorID, newDeviceName)
+	fmt.Printf("更新EID: %s -> %s\n", sensorID, newDeviceName)
 	return nil
 }
 
-// 由EID找设备名
+// 取设备名
 func LookupDeviceName(sensorID string) (deviceName string, ok bool) {
 	mu1.RLock()
 	defer mu1.RUnlock()
@@ -50,11 +51,11 @@ func LookupDeviceName(sensorID string) (deviceName string, ok bool) {
 	return
 }
 
-// EID映射
+// EID映射初始化
 func UpdateSensorMapping() {
 	mu1.Lock()
 	defer mu1.Unlock()
-	// 清空旧映射
+
 	SensorIDToDeviceName = make(map[string]string)
 
 	for deviceName, resourceMap := range ValuesMap {
@@ -76,4 +77,18 @@ func UpdateSensorMapping() {
 		}
 		SensorIDToDeviceName[eid] = deviceName
 	}
+}
+
+// 删除映射
+func DeleteSensorIDMappingsByDevice(deviceName string) error {
+	toDelete := make([]string, 0)
+	for sensorID, mappedDeviceName := range SensorIDToDeviceName {
+		if mappedDeviceName == deviceName {
+			toDelete = append(toDelete, sensorID)
+		}
+	}
+	for _, sensorID := range toDelete {
+		delete(SensorIDToDeviceName, sensorID)
+	}
+	return nil
 }
