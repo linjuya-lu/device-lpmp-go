@@ -4,12 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync"
-)
-
-var (
-	Mu        sync.RWMutex
-	ValuesMap = make(map[string]map[string]any) //设备名称 → (资源名称 → 值)
 )
 
 // 默认值转化

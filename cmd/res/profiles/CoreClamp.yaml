@@ -85,7 +85,7 @@ deviceResources:
       paramType: "00000011111"
 deviceCommands:
   -
-    name: "AsyncData"
+    name: "asyncData"
     readWrite: "R"
     isHidden: false
     resourceOperations:
@@ -95,3 +95,4 @@ deviceCommands:
       - { deviceResource: "ElecCurr", defaultValue: "0" }
       - { deviceResource: "Temp", defaultValue: "0" }
       - { deviceResource: "state", defaultValue: "0" }
+

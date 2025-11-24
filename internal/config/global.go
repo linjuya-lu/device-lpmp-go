@@ -1,14 +1,76 @@
 package config
 
-var (
-	//写入通道
-	WriteChan = make(chan []byte, 100)
-	//接入节点EID
-	EidStr = "238A0841D828"
-	//资源路径
-	DevicesYAML = "../cmd/res/devices/devices.yaml"
-	ProfilesDir = "../cmd/res/profiles"
-	//串口信息
-	PortName = "/dev/ttyS8"
-	BaudRate = 115200
+import (
+	"sync"
+	"time"
 )
+
+const (
+	ServiceName string = "device-wiresink"
+	Version     string = "1.0.0"
+	EidStr             = "238A0841D828" // 模块EID
+	GatewayEID         = "238A0841D828" // 汇聚网关EID
+	DevicesYAML        = "../cmd/res/devices/devices.yaml"
+	ProfilesDir        = "../cmd/res/profiles"
+	PortName           = "/dev/ttyS8" //串口信息
+	BaudRate           = 115200
+)
+
+// 上传表
+var (
+	Mu        sync.RWMutex
+	ValuesMap = make(map[string]map[string]any) //设备 → (资源 → 值)
+)
+
+// 解析表
+var (
+	paramMu  sync.RWMutex
+	paramMap = map[ParamKey]ParamInfo{
+		{0b000, 0b00000000001}: {parseFloat32},
+		{0b000, 0b00000010000}: {ParseTopo},
+	}
+)
+
+var (
+	WriteChan     = make(chan []byte, 100) // 写通道
+	LastDataTsMap = make(map[string]int64) // 设备数据时间戳
+	DrxChan       = make(chan []byte, 100) // DRX数据通道
+	TopoChan      = make(chan string, 100) // TOP原始行通道
+)
+
+// 路由表
+var (
+	TopoList    []NodeTopology
+	topoIndex   = map[string]int{} // EID -> index
+	topoMu      sync.RWMutex
+	topoLastAt  time.Time           // 最近合并时间
+	topoIdleTTL = 600 * time.Second // 超过这个空闲视为新一轮
+)
+
+// 清空
+func ClearTopo() (prev int) {
+	topoMu.Lock()
+	prev = len(TopoList)
+	TopoList = TopoList[:0]
+	topoIndex = make(map[string]int)
+	topoLastAt = time.Time{} // 清掉时间戳
+	topoMu.Unlock()
+	return
+}
+
+// 获取路由表
+func GetTopoList() []NodeTopology {
+	topoMu.RLock()
+	defer topoMu.RUnlock()
+	cloned := make([]NodeTopology, len(TopoList))
+	copy(cloned, TopoList)
+	return cloned
+}
+
+// 节点拓扑
+type NodeTopology struct {
+	EID    string `json:"eid"`    // 节点地址
+	Type   string `json:"type"`   // 节点类型：0=微功率，1=汇聚，2=低功耗，4=接入
+	State  string `json:"state"`  // 在线状态  1=在线，0=离线
+	Parent string `json:"parent"` // 父节点地址
+}

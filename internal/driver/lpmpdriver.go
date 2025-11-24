@@ -2,9 +2,9 @@ package driver
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,16 +47,8 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *LpMpDriver) Start() error {
-	//配置文件下发
-	if err := d.sdk.AddCustomRoute(
-		"/custom/load-param-map",
-		interfaces.Unauthenticated,
-		d.handleLoadParamMap,
-		http.MethodPost,
-	); err != nil {
-		return fmt.Errorf("register route failed: %w", err)
-	}
-	// 初始化
+	// 初始化API
+	d.addCustomRoutes()
 	if err := InitDeviceValues(d.sdk); err != nil {
 		return fmt.Errorf("Start 初始化设备资源失败: %w", err)
 	}
@@ -68,8 +60,8 @@ func (d *LpMpDriver) Start() error {
 	}
 	// Lora解析
 	serial.StartSerialScanner(serialPort)
-	frameparser.StartParser(serial.DrxChan, d.AsyncReporting)
-	serial.StartTopoProcessor(serial.TopoChan)
+	frameparser.StartParser(config.DrxChan, d.AsyncReporting)
+	serial.StartTopoProcessor(config.TopoChan)
 	//命令处理
 	serial.StartWriteWorker(serialPort)
 
@@ -91,23 +83,6 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 	}
 	for _, req := range reqs {
 		resName := req.DeviceResourceName
-		// 请求路由
-		if resName == "topo" {
-			serial.ClearTopo()
-			serial.SendTopoQuery(0, 10)
-			topo := serial.GetTopoList()
-			fmt.Printf("拓扑路由:%s", topo)
-			cv, cerr := dsModels.NewCommandValue(
-				resName,
-				common.ValueTypeObject,
-				topo,
-			)
-			if cerr != nil {
-				return nil, fmt.Errorf("NewCommandValue函数 失败: %w", cerr)
-			}
-			res = append(res, cv)
-			continue
-		}
 		// 时间查询
 		if resName == "timeQuery" {
 			if err := d.handleTimeParameterSet(deviceName); err != nil {
@@ -120,7 +95,7 @@ func (d *LpMpDriver) HandleReadCommands(deviceName string, protocols map[string]
 			res = append(res, cv)
 			continue
 		}
-		// 复位
+		// 复位设置
 		if resName == "reset" {
 			if err := d.handleResetCommand(deviceName); err != nil {
 				return nil, err
@@ -176,12 +151,9 @@ func (d *LpMpDriver) HandleWriteCommands(deviceName string, protocols map[string
 	defer d.locker.Unlock()
 
 	d.lc.Debug("设备=%s, 请求数=%d", deviceName, len(reqs))
-
 	for i, req := range reqs {
 		resName := req.DeviceResourceName
-
-		d.lc.Debug("常规命令 %d Resource=%s", i, resName)
-
+		d.lc.Debug("命令%d 写入%s", i, resName)
 	}
 	return nil
 }
@@ -192,13 +164,30 @@ func (d *LpMpDriver) Stop(force bool) error {
 	return nil
 }
 
+// 辅助解析
+func parseBin8(s string) (uint8, error) {
+	u, err := strconv.ParseUint(s, 2, 8)
+	return uint8(u), err
+}
+func parseBin16(s string) (uint16, error) {
+	u, err := strconv.ParseUint(s, 2, 16)
+	return uint16(u), err
+}
+func isBin(s string) bool {
+	for _, ch := range s {
+		if ch != '0' && ch != '1' {
+			return false
+		}
+	}
+	return true
+}
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("添加设备: %s", deviceName)
 	//添加EID
 	if eid, ok := extractEID(protocols); ok {
 		config.AddMapping(eid, deviceName)
 	} else {
-		d.lc.Warnf("设备 %s 未提供 LoRa.eid", deviceName)
+		d.lc.Warnf("设备 %s 未提供eid", deviceName)
 	}
 	//初始资源
 	dev, err := d.sdk.GetDeviceByName(deviceName)
@@ -214,11 +203,45 @@ func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.Pr
 		resName := dr.Name
 		defaultValue := dr.Properties.DefaultValue
 		valueType := dr.Properties.ValueType
+
 		if err := config.DeviceInit(deviceName, resName, defaultValue, valueType); err != nil {
 			return fmt.Errorf("初始化设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
 		d.lc.Debugf("已将设备 %s 的资源 %s 初始化: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+
+		// lora属性解析
+		var featStr, typeStr string
+		if dr.Attributes != nil {
+			if v, ok := dr.Attributes["paramFeatures"]; ok && v != nil {
+				featStr = strings.TrimSpace(fmt.Sprint(v))
+			}
+			if v, ok := dr.Attributes["paramType"]; ok && v != nil {
+				typeStr = strings.TrimSpace(fmt.Sprint(v))
+			}
+		}
+		if featStr == "" || typeStr == "" {
+			d.lc.Debugf("资源 %s 未配置 attributes.paramFeatures/paramType，跳过登记", resName)
+			continue
+		}
+
+		featureBits, err1 := parseBin8(featStr)
+		typeBits, err2 := parseBin16(typeStr)
+		if err1 != nil || err2 != nil {
+			d.lc.Warnf("资源 %s 的二进制解析失败: %v %v，跳过登记", resName, err1, err2)
+			continue
+		}
+		key := config.ParamKey{
+			FeatureBits: featureBits,
+			CodeBits:    typeBits,
+		}
+		config.ParamEidAdd(key, deviceName, resName)
+		d.lc.Debugf("ParamEidRegistry 登记: dev=%s res=%s -> Feature=%03b Code=%011b",
+			deviceName, resName, featureBits, typeBits)
 	}
+	if err := config.DeviceInit(deviceName, "LastDataTs", "Int64", "0"); err != nil {
+		return fmt.Errorf("初始化设备 %s 初始化失败", deviceName)
+	}
+	d.lc.Debugf("初始化设备 %s 时间戳已初始化", deviceName)
 	return nil
 }
 
@@ -227,6 +250,7 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 	//更新EID
 	if eid, ok := extractEID(protocols); ok {
 		config.UpdateMapping(eid, deviceName)
+		d.lc.Infof("设备 %s 使用 LoRa.eid=%s 建立映射成功", deviceName, eid)
 	} else {
 		d.lc.Warnf("设备 %s 未提供 LoRa.eid", deviceName)
 	}
@@ -248,8 +272,39 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 			return fmt.Errorf("更新设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
 		d.lc.Debugf("已将设备 %s 的资源 %s 初始化: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
+		// lora属性解析
+		var featStr, typeStr string
+		if dr.Attributes != nil {
+			if v, ok := dr.Attributes["paramFeatures"]; ok && v != nil {
+				featStr = strings.TrimSpace(fmt.Sprint(v))
+			}
+			if v, ok := dr.Attributes["paramType"]; ok && v != nil {
+				typeStr = strings.TrimSpace(fmt.Sprint(v))
+			}
+		}
+		d.lc.Infof("paramFeatures: %s paramType: %s", featStr, typeStr)
+		if featStr == "" || typeStr == "" {
+			d.lc.Infof("资源 %s 未配置 attributes.paramFeatures/paramType，跳过登记", resName)
+			continue
+		}
+		if !isBin(featStr) || !isBin(typeStr) {
+			d.lc.Infof("资源 %s 的二进制长度/字符非法: paramFeatures=%q paramType=%q，跳过登记", resName, featStr, typeStr)
+			continue
+		}
+		featureBits, err1 := parseBin8(featStr)
+		typeBits, err2 := parseBin16(typeStr)
+		if err1 != nil || err2 != nil {
+			d.lc.Infof("资源 %s 的二进制解析失败: %v %v，跳过登记", resName, err1, err2)
+			continue
+		}
+		key := config.ParamKey{
+			FeatureBits: featureBits,
+			CodeBits:    typeBits,
+		}
+		config.ParamEidUpdate(key, deviceName, resName)
+		d.lc.Infof("ParamEidRegistry 登记: dev=%s res=%s -> Feature=%03b Code=%011b",
+			deviceName, resName, featureBits, typeBits)
 	}
-
 	d.lc.Infof("刷新设备 %s 的资源值", deviceName)
 	return nil
 }
@@ -267,17 +322,86 @@ func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models
 		d.lc.Errorf("删除设备资源错误 %s : %v", deviceName, err)
 		return fmt.Errorf(" %s删除错误 : %w", deviceName, err)
 	}
+	//删除参数表
+	dev, err := d.sdk.GetDeviceByName(deviceName)
+	if err != nil {
+		return fmt.Errorf("获取设备 %s 失败: %w", deviceName, err)
+	}
+	profileName := dev.ProfileName
+	prof, err := d.sdk.GetProfileByName(profileName)
+	if err != nil {
+		return fmt.Errorf("获取设备配置文件 %s 失败: %w", profileName, err)
+	}
+	for _, dr := range prof.DeviceResources {
+		resName := dr.Name
+
+		var featStr, typeStr string
+		if dr.Attributes != nil {
+			if v, ok := dr.Attributes["paramFeatures"]; ok && v != nil {
+				featStr = strings.TrimSpace(fmt.Sprint(v))
+			}
+			if v, ok := dr.Attributes["paramType"]; ok && v != nil {
+				typeStr = strings.TrimSpace(fmt.Sprint(v))
+			}
+		}
+		if featStr == "" || typeStr == "" {
+			d.lc.Debugf("资源 %s 未配置 attributes.paramFeatures/paramType，跳过登记", resName)
+			continue
+		}
+		if len(featStr) != 3 || len(typeStr) != 11 || !isBin(featStr) || !isBin(typeStr) {
+			d.lc.Warnf("资源 %s 的二进制长度/字符非法: paramFeatures=%q paramType=%q，跳过登记", resName, featStr, typeStr)
+			continue
+		}
+
+		featureBits, err1 := parseBin8(featStr)
+		typeBits, err2 := parseBin16(typeStr)
+		if err1 != nil || err2 != nil {
+			d.lc.Warnf("资源 %s 的二进制解析失败: %v %v，跳过登记", resName, err1, err2)
+			continue
+		}
+		key := config.ParamKey{
+			FeatureBits: featureBits,
+			CodeBits:    typeBits,
+		}
+		config.ParamEidDelete(key, deviceName)
+		d.lc.Debugf("ParamEidRegistry 删除: dev=%s res=%s -> Feature=%03b Code=%011b",
+			deviceName, resName, featureBits, typeBits)
+	}
 
 	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {
 		d.lc.Errorf("删除设备映射错误 %s : %v", deviceName, err)
 		return fmt.Errorf("删除错误 %s : %w", deviceName, err)
 	}
 	d.lc.Infof("成功移除 %s ", deviceName)
+
 	return nil
 }
 
-func (d *LpMpDriver) ValidateDevice(device models.Device) error {
-	d.lc.Debug("ValidateDevice 未实现")
+func (s *LpMpDriver) ValidateDevice(device models.Device) error {
+	var lora models.ProtocolProperties
+	for k, v := range device.Protocols {
+		if strings.EqualFold(k, "LoRa") {
+			lora = v
+			break
+		}
+	}
+	if lora == nil {
+		return errors.New("协议字段未包含 'LoRa'")
+	}
+
+	raw, ok := lora["eid"]
+	if !ok {
+		return errors.New("未包含 'LoRa.eid'")
+	}
+	eid, ok := raw.(string)
+	if !ok {
+		return errors.New("LoRa.eid 不是字符串")
+	}
+	eid = strings.TrimSpace(eid)
+	if eid == "" {
+		return errors.New("LoRa.eid 为空")
+	}
+
 	return nil
 }
 func (d *LpMpDriver) Discover() error {

@@ -59,43 +59,41 @@ func CRC16(data []byte) uint16 {
 }
 
 func SendFrame(dstAddr string, payload []byte) {
-	// 逐字节格式化
+
 	var parts []string
 	for _, b := range payload {
 		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
-	hexStr := strings.Join(parts, "") // 合并字符串
-	// 调试
+	hexStr := strings.Join(parts, "")
 	cmd := fmt.Sprintf("\rAT+DTX=%s,%s\r\n", dstAddr, hexStr)
-	fmt.Printf(" 发送AT命令: %s", cmd)
-	// 发送
+	fmt.Printf(">> Sending AT command: %s", cmd)
 	WriteChan <- []byte(cmd)
 }
 
 func RestCommandBuildFrame(eidStr string, sensorID [6]byte, requestSetFlag byte, timestamp uint32) error {
 	if requestSetFlag != 0 && requestSetFlag != 1 {
-		return fmt.Errorf("传参错误 %d, must be 0 or 1", requestSetFlag)
+		return fmt.Errorf("invalid requestSetFlag %d, must be 0 or 1", requestSetFlag)
 	}
 
 	buf := make([]byte, 0, 6+1+1+4+2)
-	// EID
+
 	buf = append(buf, sensorID[:]...)
-	// 头
+
 	head := byte(0<<4) | byte(0<<3) | byte(0x04&0x07)
 	buf = append(buf, head)
-	// 控制字段
+
 	ctrlByte := byte((0x04&0x7F)<<1) | (requestSetFlag & 0x01)
 	buf = append(buf, ctrlByte)
-	// 时间戳
+
 	tsBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(tsBytes, timestamp)
 	buf = append(buf, tsBytes...)
-	// CRC16
+
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)
-	// 发送
+
 	SendFrame(eidStr, buf)
 
 	return nil

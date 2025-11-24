@@ -1,14 +1,16 @@
 package driver
 
 import (
+	"fmt"
 	"net/http"
 
+	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	"github.com/labstack/echo/v4"
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
 
 func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
-	// 只支持 multipart: form-data, 字段名必须是 "file"
+	// Content-Type: multipart/form-data, 字段名为file
 	fh, err := c.FormFile("file")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]any{
@@ -16,7 +18,6 @@ func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
 			"error": "missing form file field 'file': " + err.Error(),
 		})
 	}
-
 	src, err := fh.Open()
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]any{
@@ -25,9 +26,6 @@ func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
 		})
 	}
 	defer src.Close()
-
-	// 推荐：在 config 包里提供基于 Reader 的解析函数
-	// 会用 excelize.OpenReader(src) 去解析
 	if err := config.LoadParamMapFromReader(src, fh.Filename); err != nil {
 		d.lc.Errorf("LoadParamMapFromReader error: %v", err)
 		return c.JSON(http.StatusBadRequest, map[string]any{
@@ -35,6 +33,34 @@ func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
 			"error": err.Error(),
 		})
 	}
-
 	return c.JSON(http.StatusOK, map[string]any{"ok": true})
+}
+
+func (d *LpMpDriver) addCustomRoutes() error {
+
+	if err := d.sdk.AddCustomRoute(
+		"/custom/load-param-map",
+		interfaces.Unauthenticated,
+		d.handleLoadParamMap,
+		http.MethodPost,
+	); err != nil {
+		return fmt.Errorf("register load-param-map route failed: %w", err)
+	}
+
+	if err := d.sdk.AddCustomRoute(
+		"/custom/topology",
+		interfaces.Unauthenticated,
+		d.handleGetTopology,
+		http.MethodGet,
+	); err != nil {
+		return fmt.Errorf("register topology route failed: %w", err)
+	}
+
+	return nil
+}
+
+func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
+	topo := config.GetTopoList()
+	d.lc.Infof("返回拓扑列表，数量=%d", len(topo))
+	return c.JSON(http.StatusOK, topo)
 }

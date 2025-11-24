@@ -2,30 +2,29 @@ package frameparser
 
 import (
 	"encoding/binary"
+
+	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
 
-// 复位报文
+// 复位命令原始报文
 func BuildResetRequest(sensorID [6]byte) ([]byte, error) {
 	const (
-		packetType     = 0x04
-		ctrlType       = 0x06
-		dataLen        = 0
-		fragInd        = 0
-		requestSetFlag = 0
+		ctrlType = 0x06
+		dataLen  = 0
 	)
-	// EID
+	//EID
 	buf := make([]byte, 0, 6+1+1+2)
 	buf = append(buf, sensorID[:]...)
-	// 头
+	//头
 	head := byte((dataLen&0x0F)<<4) |
 		byte((fragInd&0x01)<<3) |
 		byte(packetType&0x07)
 	buf = append(buf, head)
-	// 控制部分
+	// 控制类型
 	ctrlByte := byte((ctrlType&0x7F)<<1) | byte(requestSetFlag&0x01)
 	buf = append(buf, ctrlByte)
-	//  校验
-	crc := CRC16(buf)
+	// 校验
+	crc := config.CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)

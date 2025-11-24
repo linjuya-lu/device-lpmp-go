@@ -10,22 +10,23 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 	goserial "go.bug.st/serial.v1"
 )
 
-// 打开串口
 func Open(portName string, baudRate int) (io.ReadWriteCloser, error) {
 	mode := &goserial.Mode{BaudRate: baudRate}
 	return goserial.Open(portName, mode)
 }
 
-// 解析+DRX
+// DRX前缀解析
 func ParseDRXLine(line string) ([]byte, error) {
-	// 处理 +DRX:
+	// +DRX
 	if !strings.HasPrefix(line, "+DRX:") {
 		return nil, fmt.Errorf("不是 DRX 数据行：%s", line)
 	}
-	// 分割成三部分：prefix、length、payload
+	// 分割：eid、length、payload
+	// 解码
 	parts := strings.SplitN(line, ",", 3)
 	if len(parts) != 3 {
 		return nil, fmt.Errorf("DRX 行字段数不对：%s", line)
@@ -34,7 +35,6 @@ func ParseDRXLine(line string) ([]byte, error) {
 	if len(payload)%2 != 0 {
 		return nil, fmt.Errorf("payload 长度不是偶数：%s", payload)
 	}
-	// 解码
 	n := len(payload) / 2
 	buf := make([]byte, n)
 	for i := 0; i < n; i++ {
@@ -48,13 +48,7 @@ func ParseDRXLine(line string) ([]byte, error) {
 	return buf, nil
 }
 
-// DRX数据通道
-var DrxChan = make(chan []byte, 100)
-
-// TOP原始行通道
-var TopoChan = make(chan string, 100)
-
-// Lora初步解析
+// 初步解析
 func StartSerialScanner(port io.Reader) {
 	go func() {
 		reader := bufio.NewReader(port)
@@ -78,7 +72,7 @@ func StartSerialScanner(port io.Reader) {
 			if strings.HasPrefix(line, "+DRX:") {
 				data, err := ParseDRXLine(line)
 				if err == nil {
-					DrxChan <- data
+					config.DrxChan <- data
 				}
 				continue
 			}
@@ -93,7 +87,7 @@ func StartSerialScanner(port io.Reader) {
 				}
 			case collectingTopo && line == "OK":
 				block := "+TOP:" + topoBuf.String() + "OK"
-				TopoChan <- block
+				config.TopoChan <- block
 				collectingTopo = false
 			case collectingTopo:
 				payload := strings.TrimSuffix(line, ",")
@@ -101,7 +95,7 @@ func StartSerialScanner(port io.Reader) {
 			default:
 			}
 		}
-		close(TopoChan)
-		close(DrxChan)
+		close(config.TopoChan)
+		close(config.DrxChan)
 	}()
 }
