@@ -36,7 +36,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				log.Printf("未知 EID=%s，跳过本帧", sensorID)
 				continue
 			}
-
 			// 头部
 			head := frame[6]
 			dataCount := int(head >> 4)

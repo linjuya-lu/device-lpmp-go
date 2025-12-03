@@ -3,10 +3,12 @@ package driver
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	"github.com/labstack/echo/v4"
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
+	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
 func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
@@ -60,7 +62,22 @@ func (d *LpMpDriver) addCustomRoutes() error {
 }
 
 func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
-	topo := config.GetTopoList()
-	d.lc.Infof("返回拓扑列表，数量=%d", len(topo))
+	topo, ts := serial.GetHealthTopology()
+	if len(topo) == 0 {
+		// 缓存还没准备好，或者刚启动，可以选择：
+		// 1) 直接查一次实时的
+		// 2) 返回 503 提示“拓扑未准备好”
+		ctx := c.Request().Context()
+		rt, err := serial.QueryAllTopology(ctx)
+		if err != nil {
+			d.lc.Errorf("实时拓扑查询失败: %v", err)
+			return c.JSON(http.StatusInternalServerError, map[string]any{
+				"error": err.Error(),
+			})
+		}
+		return c.JSON(http.StatusOK, rt)
+	}
+
+	d.lc.Infof("返回健康缓存拓扑，总数=%d，刷新时间=%s", len(topo), ts.Format(time.RFC3339))
 	return c.JSON(http.StatusOK, topo)
 }

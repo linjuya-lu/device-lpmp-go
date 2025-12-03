@@ -1,72 +1,52 @@
 package driver
 
 import (
-	"fmt"
+	"context"
 	"time"
 
-	"github.com/linjuya-lu/device-lpmp-go/internal/config"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
+	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
-func startHealthCheckLoop() {
+// runOneHealthCheck 执行一次拓扑全量查询，并更新全局缓存。
+// parentCtx 一般用 context.Background() / service 的主 ctx。
+func runOneHealthCheck(parentCtx context.Context, lc logger.LoggingClient) {
+	// 给这次健康检查设置一个总超时，比如 10 秒
+	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+	defer cancel()
+
+	topo, err := serial.QueryAllTopology(ctx)
+	if err != nil {
+		lc.Errorf("健康检查：拓扑查询失败: %v", err)
+		return
+	}
+
+	serial.HealthTopoMu.Lock()
+	serial.HealthTopo = topo
+	serial.HealthTopoTime = time.Now()
+	serial.HealthTopoMu.Unlock()
+
+	lc.Infof("健康检查：拓扑刷新完成，节点数=%d", len(topo))
+}
+
+// startHealthCheckLoop 启动后台健康检查循环。
+// 约定：在设备服务启动时调用一次即可。
+func startHealthCheckLoop(ctx context.Context, lc logger.LoggingClient) {
 	go func() {
-		const (
-			StateOffline uint8 = 0
-			StateOnline  uint8 = 1
-		)
-		const interval = 10 * time.Second
-		ticker := time.NewTicker(interval)
+		// 先立即跑一次，启动时就有数据
+		runOneHealthCheck(ctx, lc)
+
+		ticker := time.NewTicker(3 * time.Minute)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			config.Mu.RLock()
-			deviceNames := make([]string, 0, len(config.ValuesMap))
-			for dev := range config.ValuesMap {
-				deviceNames = append(deviceNames, dev)
-			}
-			config.Mu.RUnlock()
+		for {
+			select {
+			case <-ticker.C:
+				runOneHealthCheck(ctx, lc)
 
-			nowNs := time.Now().UnixNano() // 统一用纳秒
-			for _, dev := range deviceNames {
-
-				vals, ok := config.GetDeviceValues(dev)
-				if !ok || vals == nil {
-					continue
-				}
-				rawTs, okTs := vals["LastDataTs"]
-				rawPr, okPr := vals["period"]
-
-				fmt.Printf("dev=%s LastDataTs(raw)=%v , period(raw)=%v\n",
-					dev, rawTs, rawPr)
-				if !okTs || !okPr {
-					continue
-				}
-
-				lastTs, ok1 := rawTs.(int64)
-				period, ok2 := rawPr.(uint16)
-				if !ok1 || !ok2 || period == 0 {
-					fmt.Printf("未收到消息\n")
-					continue
-				}
-
-				// 计算 elapsed/deadline（纳秒）
-				elapsed := time.Duration(nowNs - lastTs)
-				deadline := 2 * time.Duration(period) * time.Second
-
-				// 四舍五入到秒用于打印
-				elapsedSec := int64(elapsed.Round(time.Second) / time.Second)
-				deadlineSec := int64(deadline.Round(time.Second) / time.Second)
-
-				fmt.Printf("dev=%s elapsed=%ds) deadline=%ds\n)",
-					dev, elapsedSec, deadlineSec)
-
-				// 在线=1；超时/异常=0
-				state := StateOnline
-				if elapsed >= deadline || elapsed < 0 {
-					state = StateOffline
-				}
-				// 写回状态
-				config.SetDeviceValue(dev, "heatbeat", state)
-
+			case <-ctx.Done():
+				lc.Infof("健康检查循环结束: %v", ctx.Err())
+				return
 			}
 		}
 	}()

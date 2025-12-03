@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -43,6 +44,7 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.sdk = sdk
 	d.lc = sdk.LoggingClient()
 	d.asyncCh = sdk.AsyncValuesChannel()
+
 	return nil
 }
 
@@ -61,13 +63,14 @@ func (d *LpMpDriver) Start() error {
 	// Lora解析
 	serial.StartSerialScanner(serialPort)
 	frameparser.StartParser(config.DrxChan, d.AsyncReporting)
-	serial.StartTopoProcessor(config.TopoChan)
 	//命令处理
 	serial.StartWriteWorker(serialPort)
 
 	//心跳维护
-	startHealthCheckLoop()
 	d.StartAsyncReporter()
+
+	ctx := context.Background()
+	startHealthCheckLoop(ctx, d.lc)
 	d.lc.Infof("lpmp设备服务已启动......")
 	return nil
 }

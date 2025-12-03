@@ -21,7 +21,6 @@ func WriteFrame(port io.ReadWriteCloser, frame []byte) error {
 	return nil
 }
 
-// 命令下发
 func StartWriteWorker(port io.ReadWriteCloser) {
 	go func() {
 		for frame := range config.WriteChan {
@@ -33,13 +32,11 @@ func StartWriteWorker(port io.ReadWriteCloser) {
 }
 
 func SendFrame(dstAddr string, payload []byte) {
-	// 逐字节格式化
 	var parts []string
 	for _, b := range payload {
 		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
 	hexStr := strings.Join(parts, "")
-	// AT 命令
 	cmd := fmt.Sprintf("\rAT+DTX=%s,%s\r\n", dstAddr, hexStr)
 	fmt.Printf(">> Sending AT command: %s", cmd)
 	config.WriteChan <- []byte(cmd)
