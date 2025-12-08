@@ -12,9 +12,6 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
-// deviceName: 设备名
-// sourceName: 资源名
-// resourceNames: 数据值列表
 type CallbackFunc func(deviceName, sourceName string, values map[string]any)
 
 // LORA协议解析
@@ -22,7 +19,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 	go func() {
 		for frame := range frameCh {
 			fmt.Printf("Received frame (%d bytes): % X\n", len(frame), frame)
-			// 校验
 			if len(frame) < 9 {
 				continue
 			}
@@ -36,7 +32,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				log.Printf("未知 EID=%s，跳过本帧", sensorID)
 				continue
 			}
-			// 头部
 			head := frame[6]
 			dataCount := int(head >> 4)
 			fragInd := (head >> 3) & 0x1
@@ -76,9 +71,8 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					SendDataStatus(sensorID, 0b011, 0xFF, byte(dataCount))
 				case 4, 5: // 控制报文与处理
 					handleFrameCtl(frame_ctl)
-					if config.ControlResourcesFlag {
+					if len(config.ControlResources) > 0 {
 						cb(deviceName, "asyncData", config.ControlResources)
-						config.ControlResourcesFlag = false
 					}
 					continue
 				default:
@@ -119,16 +113,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				// 解析数据
 				valBytes := frame[idx : idx+int(dataLen)]
 				idx += int(dataLen)
-				// 🔹 特殊处理：拓扑参数（feature=000, code=00000010000 -> paramType=0x0010）
-				if paramType == 0x0010 {
-					if topo, err := config.ParseTopo(valBytes); err != nil {
-						log.Printf("拓扑参数解析失败 SensorID=%s type=0x%X: %v", sensorID, paramType, err)
-					} else {
-						log.Printf("拓扑参数解析成功 SensorID=%s type=0x%X 结果=%v", sensorID, paramType, topo)
-					}
-					parsed++
-					continue
-				}
 
 				if info, ok := config.LookupParamInfo(paramType); ok {
 					val, err := info.Parse(valBytes)
@@ -143,7 +127,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 						fmt.Println("命中资源名：", resName)
 					} else {
 						fmt.Print("未找到绑定", deviceName)
-						// return
 						continue
 					}
 					config.SetDeviceValue(deviceName, resName, val)
@@ -163,11 +146,8 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 				}
 				parsed++
 			}
-			log.Printf("[DEBUG] parsed=%d dataCount=%d len(resourceValues)=%d cb=%v",
+			log.Printf("[解析] parsed=%d dataCount=%d len(resourceValues)=%d cb=%v",
 				parsed, dataCount, len(resourceValues), cb != nil)
-
-			// 解析完成，调用回调
-			fmt.Printf("cb=%v, len(resourceValues)=%d\n", cb, len(resourceValues))
 
 			if cb != nil && len(resourceValues) > 0 {
 				cb(deviceName, "asyncData", resourceValues)
@@ -182,7 +162,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 // 监测数据响应报文
 func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
 
-	// EID
 	keyBytes, err := hex.DecodeString(config.EidStr)
 	if err != nil {
 		return errors.New("invalid sensorKey hex: " + err.Error())
@@ -190,10 +169,10 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	if len(keyBytes) != 6 {
 		return errors.New("sensorKey hex must decode to 6 bytes")
 	}
-	//头
+
 	const fragInd = 0
 	header := (dataLen<<4)&0xF0 | (fragInd<<3)&0x08 | (packetType & 0x07)
-	//拼接
+
 	packet := make([]byte, 0, len(keyBytes)+1+1+2)
 	packet = append(packet, keyBytes...)
 	packet = append(packet, header)
@@ -201,7 +180,7 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	//CRC16
 	crc := config.CRC16(packet)
 	packet = append(packet, byte(crc>>8), byte(crc&0xFF))
-	//发送
+
 	serial.SendFrame(sensorKey, packet)
 	return nil
 }

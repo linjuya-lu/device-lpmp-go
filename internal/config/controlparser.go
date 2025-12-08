@@ -62,8 +62,7 @@ func LookupResponseHandle(head uint8) (ResponseHandle, bool) {
 
 // ===================== 通用控制解析函数 =====================
 var (
-	ControlResources          = make(map[string]any)
-	ControlResourcesFlag bool = false
+	ControlResources = make(map[string]any)
 )
 
 // 通用参数查询/设置
@@ -72,7 +71,6 @@ func common_para_response(data []byte, frameCtl Frame) error {
 	parsed := 0
 	ControlResources = make(map[string]any)
 
-	ControlResourcesFlag = false
 	for parsed < int(frameCtl.DataLen) {
 		if idx+2 > len(data)-2 {
 			log.Printf("参数头越界 SensorID=%s，跳过本帧", frameCtl.SensorID)
@@ -123,7 +121,6 @@ func common_para_response(data []byte, frameCtl Frame) error {
 			} else {
 				fmt.Println("未找到绑定")
 				continue
-				// return nil
 			}
 			SetDeviceValue(deviceName, resName, val)
 			ControlResources[resName] = val
@@ -133,16 +130,13 @@ func common_para_response(data []byte, frameCtl Frame) error {
 				// 更新
 				SetDeviceValue(deviceName, resName, val)
 				ControlResources[resName] = val
-
 				log.Printf("写入值 %s.%s = %v", deviceName, resName, val)
 			}
 		} else {
 			log.Printf("未找到参数类型信息 type=0x%X", paramType)
 		}
-
 		parsed++
 	}
-	ControlResourcesFlag = true
 	return nil
 }
 

@@ -1,0 +1,84 @@
+name: "TempHum"
+manufacturer: "友讯达"
+model: "温湿度传感器-20250731"
+labels: ["温湿度传感器", "友讯达温湿度传感器"]
+description: "温湿度传感器"
+
+deviceResources:
+  - name: "Temp"
+    isHidden: true
+    description: "温度值"
+    properties:
+      valueType: "Float32"
+      readWrite: "R"
+      units: "℃"
+      defaultValue: "0"
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000001000"
+  - name: "HumiAmbient"
+    isHidden: true
+    description: "湿度值"
+    properties:
+      valueType: "Float32"
+      readWrite: "R"
+      units: "%RH"
+      defaultValue: "0"
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "001"
+      paramType: "00001001"
+  - name: "BatVolt"
+    isHidden: true
+    description: "供电电压"
+    properties:
+      valueType: "Float32"
+      readWrite: "R"
+      units: "V"
+      defaultValue: "0"
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000011"
+  - name: "BatteryRemaining"
+    isHidden: true
+    description: "电池电量"
+    properties:
+      valueType: "Uint16"
+      readWrite: "R"
+      units: "%"
+      defaultValue: "0"
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000010"
+  - name: "state"
+    isHidden: true
+    description: "传感器运行状态"
+    properties:
+      valueType: "Uint8"
+      readWrite: "R"
+      units: "code"
+      defaultValue: "0"
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000011111"           
+deviceCommands:
+  -
+    name: "asyncData"
+    readWrite: "R"
+    isHidden: false
+    resourceOperations:
+      - { deviceResource: "Temp", defaultValue: "0" }
+      - { deviceResource: "HumiAmbient", defaultValue: "0" }
+      - { deviceResource: "BatVolt", defaultValue: "0" }
+      - { deviceResource: "BatteryRemaining", defaultValue: "0" }
+      - { deviceResource: "state", defaultValue: "0" }
+      

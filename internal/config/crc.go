@@ -76,9 +76,7 @@ func RestCommandBuildFrame(eidStr string, sensorID [6]byte, requestSetFlag byte,
 	}
 
 	buf := make([]byte, 0, 6+1+1+4+2)
-
 	buf = append(buf, sensorID[:]...)
-
 	head := byte(0<<4) | byte(0<<3) | byte(0x04&0x07)
 	buf = append(buf, head)
 

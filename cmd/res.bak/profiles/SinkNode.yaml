@@ -1,0 +1,237 @@
+name: "SinkNode"
+manufacturer: "四川汇源"
+model: "HJWG-20250731"
+labels: ["汇聚网关", "汇聚节点"]
+description: "汇聚节点"
+
+deviceResources: 
+  - name: "WindSpd10mAvg"                
+    isHidden: true                   
+    description: "平均风速"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"    
+      offset: 0
+      scale: 1             
+      units: ""                      
+      defaultValue: "0"   
+    attributes:
+      paramFeatures: "001"
+      paramType: "00000000001"
+  - name: "WindDir10mAvg"                
+    isHidden: true                   
+    description: "平均风向"
+    properties:
+      valueType: "Int16"            
+      readWrite: "R"    
+      offset: 0
+      scale: 1             
+      units: ""                      
+      defaultValue: "0"   
+    attributes:
+      paramFeatures: "001"
+      paramType: "00000000010"
+  - name: "WindSpdMax"                
+    isHidden: true                   
+    description: "最大风速"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"   
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "001"
+      paramType: "00000000011"
+  - name: "TempAmbient"                
+    isHidden: true                   
+    description: "环境温度"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"   
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "001"
+      paramType: "00000110"
+  - name: "HumiAmbient"                
+    isHidden: true                   
+    description: "环境湿度"
+    properties:
+      valueType: "Uint16"            
+      readWrite: "R"      
+      offset: 0
+      scale: 1         
+      units: ""                      
+      defaultValue: "0"   
+    attributes:
+      paramFeatures: "001"
+      paramType: "00000111"
+  - name: "Pressure"                
+    isHidden: true                  
+    description: "大气气压"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0" 
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "001"
+      paramType: "00001000"  
+  - name: "Rain10m"                
+    isHidden: true                   
+    description: "雨量"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"   
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "001"
+      paramType: "00001001"  
+  - name: "SolarRad"                
+    isHidden: true                   
+    description: "光照强度"
+    properties:
+      valueType: "Uint16"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"   
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "001"
+      paramType: "00001011"  
+  - name: "BatVolt"                
+    isHidden: true                   
+    description: "工作电压"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"  
+      offset: 0
+      scale: 1  
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000011110"
+  - name: "ElecCurr"                
+    isHidden: true                   
+    description: "工作电流"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"   
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000000100" 
+  - name: "Temp"                
+    isHidden: true                   
+    description: "工作温度"
+    properties:
+      valueType: "Float32"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "0"   
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000000101"
+  - name: "state"                               
+    isHidden: true
+    description: "传感器运行状态"              # 0=正常,1=故障
+    properties:
+      valueType: "Uint8"
+      readWrite: "R"
+      units: "code"
+      defaultValue: "0"
+      offset: 0
+      scale: 1
+    attributes:
+      paramFeatures: "000"
+      paramType: "00000011111"
+  - name: "timestamp"               
+    isHidden: true                   
+    description: "时间查询响应"
+    properties:
+      valueType: "String"            
+      readWrite: "R"                 
+      units: ""                      
+      defaultValue: "" 
+  - name: "timeQuery"
+    isHidden: false
+    description: "时间查询"
+    properties:
+      valueType: "String"
+      readWrite: "R"
+      units: ""
+      defaultValue: ""
+  - name: "timestampStr"
+    isHidden: false
+    description: "汇聚网关时间"
+    properties:
+      valueType: "String"
+      readWrite: "R"
+  - name: "timeSync"  
+    isHidden: false
+    description: "时间同步"
+    properties:
+      valueType: "String"    
+      readWrite: "R"       
+      units: ""
+      defaultValue: "0"      
+  - name: "reset"  
+    isHidden: false
+    description: "复位"
+    properties:
+      valueType: "String"    
+      readWrite: "R"       
+      units: ""
+      defaultValue: "0"   
+  - name: "operStatus"  
+    isHidden: false
+    description: "工况查询"
+    properties:
+      valueType: "String"    
+      readWrite: "R"       
+      units: ""
+      defaultValue: "0"   
+  - name: "upgradeStatus"
+    isHidden: false
+    description: "固件升级状态"
+    properties:
+      valueType: "String"
+      readWrite: "R"
+      units: ""
+      defaultValue: "空闲"   
+deviceCommands:
+  -
+    name: "asyncData"
+    readWrite: "R"
+    isHidden: false
+    resourceOperations:
+      - { deviceResource: "WindSpd10mAvg", defaultValue: "0" }
+      - { deviceResource: "WindDir10mAvg", defaultValue: "0" }
+      - { deviceResource: "WindSpdMax", defaultValue: "0" }
+      - { deviceResource: "TempAmbient", defaultValue: "0" }
+      - { deviceResource: "HumiAmbient", defaultValue: "0" }
+      - { deviceResource: "Pressure", defaultValue: "0" }
+      - { deviceResource: "Rain10m", defaultValue: "0" }
+      - { deviceResource: "SolarRad", defaultValue: "0" }
+      - { deviceResource: "BatVolt", defaultValue: "0" }
+      - { deviceResource: "ElecCurr", defaultValue: "0" }
+      - { deviceResource: "Temp", defaultValue: "0" }
+      - { deviceResource: "state", defaultValue: "0" }
+
+
