@@ -124,7 +124,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					var resName string
 					if rn, ok := config.ParamEidGet(key, deviceName); ok {
 						resName = rn
-						fmt.Println("命中资源名：", resName)
 					} else {
 						fmt.Print("未找到绑定", deviceName)
 						continue

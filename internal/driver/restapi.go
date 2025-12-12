@@ -62,11 +62,34 @@ func (d *LpMpDriver) addCustomRoutes() error {
 }
 
 func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
+	// 小工具函数：过滤掉 SensorIDToDeviceName 里不存在的 EID，
+	// 但模块自己的 EidStr 一律保留
+	filterByMapping := func(nodes []config.NodeTopology) []config.NodeTopology {
+		filtered := make([]config.NodeTopology, 0, len(nodes))
+		for _, n := range nodes {
+			// 1. 模块自身根节点：EID == EidStr，强制保留
+			if n.EID == config.EidStr {
+				filtered = append(filtered, n)
+				continue
+			}
+
+			// 2. 其他节点：必须在 SensorIDToDeviceName 中有映射才保留
+			if _, ok := config.LookupDeviceName(n.EID); ok {
+				filtered = append(filtered, n)
+			} else {
+				d.lc.Debugf(
+					"handleGetTopology: 丢弃脏拓扑节点 eid=%s（在 SensorIDToDeviceName 中无映射）",
+					n.EID,
+				)
+			}
+		}
+		return filtered
+	}
+
 	topo, ts := serial.GetHealthTopology()
+
 	if len(topo) == 0 {
-		// 缓存还没准备好，或者刚启动，可以选择：
-		// 1) 直接查一次实时的
-		// 2) 返回 503 提示“拓扑未准备好”
+		// 缓存没有，就查一次实时拓扑，然后一样做过滤
 		ctx := c.Request().Context()
 		rt, err := serial.QueryAllTopology(ctx)
 		if err != nil {
@@ -75,9 +98,16 @@ func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
 				"error": err.Error(),
 			})
 		}
-		return c.JSON(http.StatusOK, rt)
+
+		filtered := filterByMapping(rt)
+		d.lc.Infof("返回实时拓扑（已过滤脏数据），原始=%d，过滤后=%d",
+			len(rt), len(filtered))
+		return c.JSON(http.StatusOK, filtered)
 	}
 
-	d.lc.Infof("返回健康缓存拓扑，总数=%d，刷新时间=%s", len(topo), ts.Format(time.RFC3339))
-	return c.JSON(http.StatusOK, topo)
+	filtered := filterByMapping(topo)
+	d.lc.Infof("返回健康缓存拓扑（已过滤脏数据），原始=%d，过滤后=%d，刷新时间=%s",
+		len(topo), len(filtered), ts.Format(time.RFC3339))
+
+	return c.JSON(http.StatusOK, filtered)
 }

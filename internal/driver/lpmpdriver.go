@@ -15,6 +15,7 @@ import (
 	dsModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/dtos"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 	"github.com/linjuya-lu/device-lpmp-go/internal/frameparser"
@@ -33,6 +34,25 @@ var (
 	driver *LpMpDriver
 )
 
+func ClearAllAutoEvents(sdk interfaces.DeviceServiceSDK, lc logger.LoggingClient) error {
+	devs := sdk.Devices()
+	for _, d := range devs {
+		if len(d.AutoEvents) == 0 {
+			continue
+		}
+		name := d.Name
+		update := dtos.UpdateDevice{
+			Name:       &name,
+			AutoEvents: []dtos.AutoEvent{}, // 清空
+		}
+		if err := sdk.PatchDevice(update); err != nil {
+			lc.Errorf("清空设备 %s autoEvents 失败: %v", name, err)
+			return err
+		}
+	}
+	return nil
+}
+
 func LpMpDeviceDriver() interfaces.ProtocolDriver {
 	once.Do(func() {
 		driver = new(LpMpDriver)
@@ -49,12 +69,16 @@ func (d *LpMpDriver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 }
 
 func (d *LpMpDriver) Start() error {
-	// 初始化API
+
 	d.addCustomRoutes()
-	if err := InitDeviceValues(d.sdk); err != nil {
-		return fmt.Errorf("Start 初始化设备资源失败: %w", err)
+
+	if err := ClearAllAutoEvents(d.sdk, d.lc); err != nil {
+		return fmt.Errorf("Start 清空 autoEvents 失败: %w", err)
 	}
-	config.UpdateSensorMapping()
+
+	if err := InitDeviceValues(d.sdk, d.lc); err != nil {
+		d.lc.Errorf("InitDeviceValues 发生错误: %v", err)
+	}
 
 	serialPort, err := serial.Open(config.PortName, config.BaudRate)
 	if err != nil {
@@ -70,7 +94,7 @@ func (d *LpMpDriver) Start() error {
 	d.StartAsyncReporter()
 
 	ctx := context.Background()
-	startHealthCheckLoop(ctx, d.lc)
+	d.startHealthCheckLoop(ctx, d.lc)
 	d.lc.Infof("lpmp设备服务已启动......")
 	return nil
 }
@@ -176,16 +200,14 @@ func parseBin16(s string) (uint16, error) {
 	u, err := strconv.ParseUint(s, 2, 16)
 	return uint16(u), err
 }
-func isBin(s string) bool {
-	for _, ch := range s {
-		if ch != '0' && ch != '1' {
-			return false
-		}
-	}
-	return true
-}
+
 func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("添加设备: %s", deviceName)
+
+	if err := ClearAllAutoEvents(d.sdk, d.lc); err != nil {
+		return fmt.Errorf("Start 清空 autoEvents 失败: %w", err)
+	}
+
 	//添加EID
 	if eid, ok := extractEID(protocols); ok {
 		config.AddMapping(eid, deviceName)
@@ -212,27 +234,46 @@ func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.Pr
 		}
 		d.lc.Debugf("已将设备 %s 的资源 %s 初始化: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
 
-		// lora属性解析
+		// ===== attributes.lora=====
 		var featStr, typeStr string
-		if dr.Attributes != nil {
-			if v, ok := dr.Attributes["paramFeatures"]; ok && v != nil {
-				featStr = strings.TrimSpace(fmt.Sprint(v))
-			}
-			if v, ok := dr.Attributes["paramType"]; ok && v != nil {
-				typeStr = strings.TrimSpace(fmt.Sprint(v))
-			}
+
+		if dr.Attributes == nil {
+			d.lc.Debugf("资源 %s 未配置 attributes，跳过 LoRa 登记", resName)
+			continue
 		}
+
+		rawLora, ok := dr.Attributes["lora"]
+		if !ok || rawLora == nil {
+			d.lc.Debugf("资源 %s 未配置 attributes.lora，跳过 LoRa 登记", resName)
+			continue
+		}
+
+		loraMap, ok := rawLora.(map[string]any)
+		if !ok {
+			d.lc.Warnf("资源 %s attributes.lora 类型异常: %T，期望 map[string]any，跳过 LoRa 登记", resName, rawLora)
+			continue
+		}
+
+		if v, ok := loraMap["paramFeatures"]; ok && v != nil {
+			featStr = strings.TrimSpace(fmt.Sprint(v))
+		}
+		if v, ok := loraMap["paramType"]; ok && v != nil {
+			typeStr = strings.TrimSpace(fmt.Sprint(v))
+		}
+
 		if featStr == "" || typeStr == "" {
-			d.lc.Debugf("资源 %s 未配置 attributes.paramFeatures/paramType，跳过登记", resName)
+			d.lc.Debugf("资源 %s 的 lora.paramFeatures 或 lora.paramType 为空，跳过 LoRa 登记", resName)
 			continue
 		}
 
 		featureBits, err1 := parseBin8(featStr)
 		typeBits, err2 := parseBin16(typeStr)
 		if err1 != nil || err2 != nil {
-			d.lc.Warnf("资源 %s 的二进制解析失败: %v %v，跳过登记", resName, err1, err2)
+			d.lc.Warnf("资源 %s LoRa 二进制解析失败: feature=%q err=%v, type=%q err=%v，跳过 LoRa 登记",
+				resName, featStr, err1, typeStr, err2)
 			continue
 		}
+
 		key := config.ParamKey{
 			FeatureBits: featureBits,
 			CodeBits:    typeBits,
@@ -240,16 +281,18 @@ func (d *LpMpDriver) AddDevice(deviceName string, protocols map[string]models.Pr
 		config.ParamEidAdd(key, deviceName, resName)
 		d.lc.Debugf("ParamEidRegistry 登记: dev=%s res=%s -> Feature=%03b Code=%011b",
 			deviceName, resName, featureBits, typeBits)
+		// ===== LoRa 属性解析结束 =====
 	}
-	if err := config.DeviceInit(deviceName, "LastDataTs", "Int64", "0"); err != nil {
-		return fmt.Errorf("初始化设备 %s 初始化失败", deviceName)
-	}
-	d.lc.Debugf("初始化设备 %s 时间戳已初始化", deviceName)
 	return nil
 }
 
 func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
 	d.lc.Debugf("更新设备 %s", deviceName)
+
+	if err := ClearAllAutoEvents(d.sdk, d.lc); err != nil {
+		return fmt.Errorf("Start 清空 autoEvents 失败: %w", err)
+	}
+
 	//更新EID
 	if eid, ok := extractEID(protocols); ok {
 		config.UpdateMapping(eid, deviceName)
@@ -275,45 +318,65 @@ func (d *LpMpDriver) UpdateDevice(deviceName string, protocols map[string]models
 			return fmt.Errorf("更新设备 %s 资源 %s 失败：%v", deviceName, resName, err)
 		}
 		d.lc.Debugf("已将设备 %s 的资源 %s 初始化: %s (类型: %s)", deviceName, resName, defaultValue, valueType)
-		// lora属性解析
+		// ===== attributes.lora=====
 		var featStr, typeStr string
-		if dr.Attributes != nil {
-			if v, ok := dr.Attributes["paramFeatures"]; ok && v != nil {
-				featStr = strings.TrimSpace(fmt.Sprint(v))
-			}
-			if v, ok := dr.Attributes["paramType"]; ok && v != nil {
-				typeStr = strings.TrimSpace(fmt.Sprint(v))
-			}
+
+		if dr.Attributes == nil {
+			d.lc.Debugf("资源 %s 未配置 attributes，跳过 LoRa 登记", resName)
+			continue
 		}
-		d.lc.Infof("paramFeatures: %s paramType: %s", featStr, typeStr)
+
+		rawLora, ok := dr.Attributes["lora"]
+		if !ok || rawLora == nil {
+			d.lc.Debugf("资源 %s 未配置 attributes.lora，跳过 LoRa 登记", resName)
+			continue
+		}
+
+		loraMap, ok := rawLora.(map[string]any)
+		if !ok {
+			d.lc.Warnf("资源 %s attributes.lora 类型异常: %T，期望 map[string]any，跳过 LoRa 登记", resName, rawLora)
+			continue
+		}
+
+		if v, ok := loraMap["paramFeatures"]; ok && v != nil {
+			featStr = strings.TrimSpace(fmt.Sprint(v))
+		}
+		if v, ok := loraMap["paramType"]; ok && v != nil {
+			typeStr = strings.TrimSpace(fmt.Sprint(v))
+		}
+
 		if featStr == "" || typeStr == "" {
-			d.lc.Infof("资源 %s 未配置 attributes.paramFeatures/paramType，跳过登记", resName)
+			d.lc.Debugf("资源 %s 的 lora.paramFeatures 或 lora.paramType 为空，跳过 LoRa 登记", resName)
 			continue
 		}
-		if !isBin(featStr) || !isBin(typeStr) {
-			d.lc.Infof("资源 %s 的二进制长度/字符非法: paramFeatures=%q paramType=%q，跳过登记", resName, featStr, typeStr)
-			continue
-		}
+
 		featureBits, err1 := parseBin8(featStr)
 		typeBits, err2 := parseBin16(typeStr)
 		if err1 != nil || err2 != nil {
-			d.lc.Infof("资源 %s 的二进制解析失败: %v %v，跳过登记", resName, err1, err2)
+			d.lc.Warnf("资源 %s LoRa 二进制解析失败: feature=%q err=%v, type=%q err=%v，跳过 LoRa 登记",
+				resName, featStr, err1, typeStr, err2)
 			continue
 		}
+
 		key := config.ParamKey{
 			FeatureBits: featureBits,
 			CodeBits:    typeBits,
 		}
-		config.ParamEidUpdate(key, deviceName, resName)
-		d.lc.Infof("ParamEidRegistry 登记: dev=%s res=%s -> Feature=%03b Code=%011b",
+		config.ParamEidAdd(key, deviceName, resName)
+		d.lc.Debugf("ParamEidRegistry 登记: dev=%s res=%s -> Feature=%03b Code=%011b",
 			deviceName, resName, featureBits, typeBits)
+		// ===== LoRa 属性解析结束 =====
 	}
-	d.lc.Infof("刷新设备 %s 的资源值", deviceName)
 	return nil
 }
 
 func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
 	d.lc.Debugf("移除设备： %s", deviceName)
+
+	if err := ClearAllAutoEvents(d.sdk, d.lc); err != nil {
+		return fmt.Errorf("Start 清空 autoEvents 失败: %w", err)
+	}
+
 	//移除EID
 	if eid, ok := extractEID(protocols); ok {
 		config.DeleteMapping(eid)
@@ -338,30 +401,46 @@ func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models
 	for _, dr := range prof.DeviceResources {
 		resName := dr.Name
 
+		// ===== attributes.lora=====
 		var featStr, typeStr string
-		if dr.Attributes != nil {
-			if v, ok := dr.Attributes["paramFeatures"]; ok && v != nil {
-				featStr = strings.TrimSpace(fmt.Sprint(v))
-			}
-			if v, ok := dr.Attributes["paramType"]; ok && v != nil {
-				typeStr = strings.TrimSpace(fmt.Sprint(v))
-			}
-		}
-		if featStr == "" || typeStr == "" {
-			d.lc.Debugf("资源 %s 未配置 attributes.paramFeatures/paramType，跳过登记", resName)
+
+		if dr.Attributes == nil {
+			d.lc.Debugf("资源 %s 未配置 attributes，跳过 LoRa 登记", resName)
 			continue
 		}
-		if len(featStr) != 3 || len(typeStr) != 11 || !isBin(featStr) || !isBin(typeStr) {
-			d.lc.Warnf("资源 %s 的二进制长度/字符非法: paramFeatures=%q paramType=%q，跳过登记", resName, featStr, typeStr)
+
+		rawLora, ok := dr.Attributes["lora"]
+		if !ok || rawLora == nil {
+			d.lc.Debugf("资源 %s 未配置 attributes.lora，跳过 LoRa 登记", resName)
+			continue
+		}
+
+		loraMap, ok := rawLora.(map[string]any)
+		if !ok {
+			d.lc.Warnf("资源 %s attributes.lora 类型异常: %T，期望 map[string]any，跳过 LoRa 登记", resName, rawLora)
+			continue
+		}
+
+		if v, ok := loraMap["paramFeatures"]; ok && v != nil {
+			featStr = strings.TrimSpace(fmt.Sprint(v))
+		}
+		if v, ok := loraMap["paramType"]; ok && v != nil {
+			typeStr = strings.TrimSpace(fmt.Sprint(v))
+		}
+
+		if featStr == "" || typeStr == "" {
+			d.lc.Debugf("资源 %s 的 lora.paramFeatures 或 lora.paramType 为空，跳过 LoRa 登记", resName)
 			continue
 		}
 
 		featureBits, err1 := parseBin8(featStr)
 		typeBits, err2 := parseBin16(typeStr)
 		if err1 != nil || err2 != nil {
-			d.lc.Warnf("资源 %s 的二进制解析失败: %v %v，跳过登记", resName, err1, err2)
+			d.lc.Warnf("资源 %s LoRa 二进制解析失败: feature=%q err=%v, type=%q err=%v，跳过 LoRa 登记",
+				resName, featStr, err1, typeStr, err2)
 			continue
 		}
+
 		key := config.ParamKey{
 			FeatureBits: featureBits,
 			CodeBits:    typeBits,
@@ -369,6 +448,7 @@ func (d *LpMpDriver) RemoveDevice(deviceName string, protocols map[string]models
 		config.ParamEidDelete(key, deviceName)
 		d.lc.Debugf("ParamEidRegistry 删除: dev=%s res=%s -> Feature=%03b Code=%011b",
 			deviceName, resName, featureBits, typeBits)
+		// ===== LoRa 属性解析结束 =====
 	}
 
 	if err := config.DeleteSensorIDMappingsByDevice(deviceName); err != nil {

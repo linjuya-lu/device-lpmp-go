@@ -27,7 +27,6 @@ var (
 func SendTopoQuery(startIndex, numOfQuery int) {
 	body := fmt.Sprintf("AT+TOP=%d,%d?", startIndex, numOfQuery)
 	cmd := "\r" + body + "\r\n"
-	fmt.Printf("拓扑查询: %s\n", body)
 	config.WriteChan <- []byte(cmd)
 }
 
@@ -102,7 +101,6 @@ func QueryAllTopology(ctx context.Context) ([]config.NodeTopology, error) {
 		all        []config.NodeTopology
 	)
 
-	// 避免HTTP并发
 	topoSessionMu.Lock()
 	defer topoSessionMu.Unlock()
 
@@ -110,45 +108,34 @@ drain:
 	for {
 		select {
 		case <-topoRespCh:
-			// 丢弃旧的 TopoPage
 		default:
 			break drain
 		}
 	}
 
 	for {
-		// 发一页TOP命令
 		SendTopoQuery(startIndex, pageSize)
-		// 等这一页结果
 		select {
 		case page := <-topoRespCh:
-			// 第一次拿到页结果时，初始化总数和预分配切片
 			if total < 0 {
 				total = page.Total
-				// total 可能为 0（没有节点），这时 all = nil 也是合法的空结果
 				all = make([]config.NodeTopology, 0, max(total, 0))
 			}
-			// 累加当前页节点
 			all = append(all, page.Nodes...)
-			// 计算下一页起始索引
 			startIndex += page.Number
-			// 已经取完所有节点，或者这一页 number=0，查询结束
 			if startIndex >= total || page.Number == 0 {
 				return all, nil
 			}
 
 		case <-ctx.Done():
-			// 调用方主动取消
 			return nil, ctx.Err()
 
-		case <-time.After(3 * time.Second):
-			// 单页等待超时
+		case <-time.After(2 * time.Second):
 			return nil, fmt.Errorf("等待拓扑第 %d 页超时", startIndex/pageSize)
 		}
 	}
 }
 
-// 小工具
 func max(a, b int) int {
 	if a > b {
 		return a

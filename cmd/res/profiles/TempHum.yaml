@@ -29,7 +29,7 @@ deviceResources:
       offset: 0
       scale: 1
     attributes:
-      paramFeatures: "001"
+      paramFeatures: "000"
       paramType: "00001001"
   - name: "BatVolt"
     isHidden: true

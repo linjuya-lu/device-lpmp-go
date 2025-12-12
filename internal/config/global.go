@@ -32,10 +32,9 @@ var (
 )
 
 var (
-	WriteChan     = make(chan []byte, 100) // 写通道
-	LastDataTsMap = make(map[string]int64) // 设备数据时间戳
-	DrxChan       = make(chan []byte, 100) // DRX数据通道
-	TopoChan      = make(chan string, 100) // TOP原始行通道
+	WriteChan = make(chan []byte, 100) // 写通道
+	DrxChan   = make(chan []byte, 100) // DRX数据通道
+	TopoChan  = make(chan string, 100) // TOP原始行通道
 )
 
 // 路由表

@@ -117,7 +117,6 @@ func common_para_response(data []byte, frameCtl Frame) error {
 			var resName string
 			if rn, ok := ParamEidGet(key, deviceName); ok {
 				resName = rn
-				fmt.Println("命中资源名：", resName)
 			} else {
 				fmt.Println("未找到绑定")
 				continue

@@ -16,8 +16,8 @@ deviceResources:
       offset: 0
       scale: 1
     attributes:
-      paramFeatures: "011"
-      paramType: "00000000100"
+      paramFeatures: "000"
+      paramType: "10100011"
   - name: "BatVolt"
     isHidden: true
     description: "设备电压"
@@ -30,7 +30,7 @@ deviceResources:
       scale: 1
     attributes:
       paramFeatures: "000"
-      paramType: "00000011110"
+      paramType: "11"
   - name: "BatteryRemaining"
     isHidden: true
     description: "电池电量"
@@ -43,7 +43,7 @@ deviceResources:
       scale: 1
     attributes:
       paramFeatures: "000"
-      paramType: "00000011101"
+      paramType: "10"
   - name: "state"
     isHidden: true
     description: "传感器运行状态"
