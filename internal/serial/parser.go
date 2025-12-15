@@ -19,11 +19,17 @@ import (
 
 var (
 	HealthTopoMu   sync.RWMutex
-	HealthTopo     []config.NodeTopology // 最近一次巡检得到的拓扑
+	HealthTopo     []config.NodeTopology // 巡检得到的拓扑
 	HealthTopoTime time.Time             // 巡检时间戳
 )
 
-// GetHealthTopology 返回一份拷贝，避免调用方改到内部 slice
+type topoParser struct {
+	collecting bool            // 是否处在一段 +TOP ... OK 之间
+	buf        strings.Builder // 节点字段临时缓冲区
+	total      int             // 本次TOP报文声明的总节点数
+	number     int             // 本页返回的节点数
+}
+
 func GetHealthTopology() ([]config.NodeTopology, time.Time) {
 	HealthTopoMu.RLock()
 	defer HealthTopoMu.RUnlock()
@@ -37,13 +43,6 @@ func GetHealthTopology() ([]config.NodeTopology, time.Time) {
 	return cloned, HealthTopoTime
 }
 
-type topoParser struct {
-	collecting bool
-	buf        strings.Builder
-	total      int
-	number     int
-}
-
 func Open(portName string, baudRate int) (io.ReadWriteCloser, error) {
 	mode := &goserial.Mode{BaudRate: baudRate}
 	return goserial.Open(portName, mode)
@@ -55,20 +54,17 @@ func ParseDRXLine(line string) ([]byte, error) {
 	if !strings.HasPrefix(line, "+DRX:") {
 		return nil, fmt.Errorf("不是 DRX 数据行：%s", line)
 	}
-	// 去掉"+DRX:"
 	line = strings.TrimSpace(line[len("+DRX:"):])
-	// 取出payload
 	parts := strings.SplitN(line, ",", 3)
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("DRX 行字段数不对：%s", line)
+		return nil, fmt.Errorf("DRX行字段数不对：%s", line)
 	}
 	payload := strings.TrimSpace(parts[2])
-	// HEX 字符串解码成[]byte
+	//字符串解码成[]byte
 	data, err := hex.DecodeString(payload)
 	if err != nil {
 		return nil, fmt.Errorf("解析 DRX payload 失败：%w", err)
 	}
-
 	return data, nil
 }
 
@@ -76,8 +72,7 @@ func ParseDRXLine(line string) ([]byte, error) {
 func StartSerialScanner(port io.Reader) {
 	go func() {
 		reader := bufio.NewReader(port)
-		var tp topoParser // TOP 解析状态机
-
+		var tp topoParser
 		for {
 			rawLine, err := reader.ReadString('\n')
 			if err != nil {
@@ -89,12 +84,11 @@ func StartSerialScanner(port io.Reader) {
 				}
 				break
 			}
-
 			line := strings.TrimSpace(rawLine)
 			if line == "" {
 				continue
 			}
-			//  DRX 处理
+			// DRX处理
 			if strings.HasPrefix(line, "+DRX:") {
 				data, err := ParseDRXLine(line)
 				if err == nil {
@@ -104,7 +98,7 @@ func StartSerialScanner(port io.Reader) {
 			}
 			// TOP 处理
 			switch {
-			// TOP 头行：+TOP:<TotalNum>,<number>,[后面可能直接跟部分节点字段]
+			// TOP 头行：+TOP:<TotalNum>,<number>,[节点字段]
 			case strings.HasPrefix(line, "+TOP:"):
 				tp.collecting = true
 				tp.buf.Reset()
@@ -113,7 +107,7 @@ func StartSerialScanner(port io.Reader) {
 				header := strings.TrimSpace(line[len("+TOP:"):])
 				parts := strings.SplitN(header, ",", 3) // TotalNum, number, [剩余节点字段...]
 				if len(parts) < 2 {
-					log.Printf("TOP 头字段太少: %q", line)
+					log.Printf("TOP头字段太少: %q", line)
 					tp.collecting = false
 					continue
 				}
@@ -132,19 +126,16 @@ func StartSerialScanner(port io.Reader) {
 				}
 				tp.total = total
 				tp.number = number
-
-				// 这一行后面已经带了一部分节点字段（parts[2]）
+				// 部分节点字段（parts[2]）
 				if len(parts) == 3 {
 					payload := strings.TrimSpace(parts[2])
 					if payload != "" {
 						tp.buf.WriteString(payload)
 					}
 				}
-
 			// TOP 结束行：OK
 			case tp.collecting && line == "OK":
 				nodePart := strings.TrimSpace(tp.buf.String())
-
 				// 解析节点段："EID,Type,State,Parent,..."
 				nodes, err := parseBuffer(nodePart)
 				if err != nil {

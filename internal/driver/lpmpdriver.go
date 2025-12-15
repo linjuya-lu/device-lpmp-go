@@ -82,7 +82,7 @@ func (d *LpMpDriver) Start() error {
 
 	serialPort, err := serial.Open(config.PortName, config.BaudRate)
 	if err != nil {
-		return fmt.Errorf("打开串口 %s 失败: %w", config.PortName, err)
+		return fmt.Errorf("打开串口%s失败: %w", config.PortName, err)
 	}
 	// Lora解析
 	serial.StartSerialScanner(serialPort)
