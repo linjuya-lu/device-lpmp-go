@@ -94,17 +94,14 @@ func parseBuffer(buf string) ([]config.NodeTopology, error) {
 
 func QueryAllTopology(ctx context.Context) ([]config.NodeTopology, error) {
 	const pageSize = 10
-
 	var (
 		startIndex = 0
 		total      = -1
 		all        []config.NodeTopology
 	)
-
 	topoSessionMu.Lock()
 	defer topoSessionMu.Unlock()
-
-drain:
+drain: //清空脏数据
 	for {
 		select {
 		case <-topoRespCh:
@@ -112,7 +109,6 @@ drain:
 			break drain
 		}
 	}
-
 	for {
 		SendTopoQuery(startIndex, pageSize)
 		select {
@@ -126,12 +122,10 @@ drain:
 			if startIndex >= total || page.Number == 0 {
 				return all, nil
 			}
-
 		case <-ctx.Done():
 			return nil, ctx.Err()
-
 		case <-time.After(2 * time.Second):
-			return nil, fmt.Errorf("等待拓扑第 %d 页超时", startIndex/pageSize)
+			return nil, fmt.Errorf("等待拓扑第%d页超时", startIndex/pageSize)
 		}
 	}
 }

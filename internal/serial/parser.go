@@ -96,10 +96,8 @@ func StartSerialScanner(port io.Reader) {
 				}
 				continue
 			}
-			// TOP 处理
 			switch {
-			// TOP 头行：+TOP:<TotalNum>,<number>,[节点字段]
-			case strings.HasPrefix(line, "+TOP:"):
+			case strings.HasPrefix(line, "+TOP:"): // TOP 头行：+TOP:<TotalNum>,<number>,[节点字段]
 				tp.collecting = true
 				tp.buf.Reset()
 				tp.total, tp.number = 0, 0
@@ -133,36 +131,29 @@ func StartSerialScanner(port io.Reader) {
 						tp.buf.WriteString(payload)
 					}
 				}
-			// TOP 结束行：OK
-			case tp.collecting && line == "OK":
+			case tp.collecting && line == "OK": // TOP结束行：OK
 				nodePart := strings.TrimSpace(tp.buf.String())
 				// 解析节点段："EID,Type,State,Parent,..."
 				nodes, err := parseBuffer(nodePart)
 				if err != nil {
-					log.Printf("TOP 节点段解析失败: %v | 原始=%q", err, nodePart)
+					log.Printf("TOP节点段解析失败:%v|原始=%q", err, nodePart)
 					tp.collecting = false
 					continue
 				}
 				if len(nodes) != tp.number {
-					log.Printf("TOP number=%d, 实际节点数=%d", tp.number, len(nodes))
+					log.Printf("TOP number=%d,实际节点数=%d", tp.number, len(nodes))
 				}
-
 				page := TopoPage{
 					Total:  tp.total,
 					Number: tp.number,
 					Nodes:  nodes,
 				}
-				// 把这一页丢给等待的 QueryAllTopology
 				select {
-				case topoRespCh <- page:
+				case topoRespCh <- page: // 丢给QueryAllTopology
 				default:
-					// 没人等，忽略
 				}
 				tp.collecting = false
-
-			// TOP 中间行：纯节点内容
-			case tp.collecting:
-				// 多行节点内容，逐行累加
+			case tp.collecting: // TOP 中间行：纯节点内容
 				payload := strings.TrimSuffix(line, ",")
 				payload = strings.TrimSpace(payload)
 				if payload != "" {
@@ -171,13 +162,9 @@ func StartSerialScanner(port io.Reader) {
 					}
 					tp.buf.WriteString(payload)
 				}
-
 			default:
-				// 未识别行，忽略
 			}
 		}
-
-		// 串口读结束时
 		close(config.DrxChan)
 	}()
 }

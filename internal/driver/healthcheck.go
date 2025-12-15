@@ -15,13 +15,11 @@ import (
 func (d *LpMpDriver) runOneHealthCheck(parentCtx context.Context) {
 	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 	defer cancel()
-
 	topo, err := serial.QueryAllTopology(ctx)
 	if err != nil {
 		d.lc.Errorf("健康检查：拓扑查询失败: %v", err)
 		return
 	}
-
 	// 更新健康缓存
 	serial.HealthTopoMu.Lock()
 	serial.HealthTopo = topo

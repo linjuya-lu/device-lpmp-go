@@ -40,7 +40,6 @@ func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
 }
 
 func (d *LpMpDriver) addCustomRoutes() error {
-
 	if err := d.sdk.AddCustomRoute(
 		"/custom/load-param-map",
 		interfaces.Unauthenticated,
@@ -49,7 +48,6 @@ func (d *LpMpDriver) addCustomRoutes() error {
 	); err != nil {
 		return fmt.Errorf("register load-param-map route failed: %w", err)
 	}
-
 	if err := d.sdk.AddCustomRoute(
 		"/custom/topology",
 		interfaces.Unauthenticated,
@@ -58,7 +56,6 @@ func (d *LpMpDriver) addCustomRoutes() error {
 	); err != nil {
 		return fmt.Errorf("register topology route failed: %w", err)
 	}
-
 	return nil
 }
 
@@ -85,7 +82,6 @@ func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
 		}
 		node.Desc = desc
 	}
-
 	// 过滤拓扑、按规则填充Desc
 	filterByMapping := func(nodes []config.NodeTopology) []config.NodeTopology {
 		filtered := make([]config.NodeTopology, 0, len(nodes))
@@ -121,14 +117,11 @@ func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
 				"error": err.Error(),
 			})
 		}
-
 		filtered := filterByMapping(rt)
 		d.lc.Infof("返回实时拓扑，原始=%d，过滤后=%d", len(rt), len(filtered))
 		return c.JSON(http.StatusOK, filtered)
 	}
-
 	filtered := filterByMapping(topo)
 	d.lc.Infof("返回健康缓存拓扑，原始=%d，过滤后=%d，刷新时间=%s", len(topo), len(filtered), ts.Format(time.RFC3339))
-
 	return c.JSON(http.StatusOK, filtered)
 }
