@@ -12,8 +12,9 @@ const (
 	GatewayEID         = "238A0841D828" // 汇聚网关EID
 	DevicesYAML        = "../cmd/res/devices/devices.yaml"
 	ProfilesDir        = "../cmd/res/profiles"
-	PortName           = "/dev/ttyUSB0" //串口信息
-	BaudRate           = 115200
+	// PortName           = "/dev/ttyUSB0" //串口信息
+	PortName = "/dev/ttyS4" //串口信息
+	BaudRate = 115200
 )
 
 // 上传表

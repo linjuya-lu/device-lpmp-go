@@ -1,7 +1,7 @@
 .PHONY: build clean docker 
 
 ENABLE_FULL_RELRO=true
-ENABLE_PIE=true
+ENABLE_PIE=false
 
 MICROSERVICES=cmd/device-lpmp
 ARCH ?= aarch64
@@ -37,9 +37,9 @@ GOFLAGS=-ldflags "-s -w \
                   $(ENABLE_FULL_RELRO_GOFLAGS)" \
         -trimpath -mod=readonly
 
-ifeq ($(ENABLE_PIE), true)
-	GOFLAGS += -buildmode=pie
-endif
+# ifeq ($(ENABLE_PIE), true)
+# 	GOFLAGS += -buildmode=pie
+# endif
 
 build: $(MICROSERVICES)
 
