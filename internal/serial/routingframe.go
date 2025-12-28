@@ -10,17 +10,16 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/config"
 )
 
-// 一页 TOP 返回结果
+// 一页TOP返回结果
 type TopoPage struct {
-	Total  int                   // 节点总数
-	Number int                   // 本页返回数量
-	Nodes  []config.NodeTopology // 本页节点
+	Total  int                   //节点总数
+	Number int                   //本页返回数量
+	Nodes  []config.NodeTopology //本页节点
 }
 
 var (
-	topoRespCh = make(chan TopoPage, 1) // 一页结果
-
-	topoSessionMu sync.Mutex // HTTP并发
+	topoRespCh    = make(chan TopoPage, 1) //一页结果
+	topoSessionMu sync.Mutex               //HTTP并发
 )
 
 // 拓扑查询
@@ -36,7 +35,6 @@ func parseBuffer(buf string) ([]config.NodeTopology, error) {
 	if buf == "" {
 		return nil, nil
 	}
-
 	// 按逗号拆分并清理空字段/空格
 	raw := strings.Split(buf, ",")
 	fields := make([]string, 0, len(raw))
@@ -46,12 +44,9 @@ func parseBuffer(buf string) ([]config.NodeTopology, error) {
 			fields = append(fields, f)
 		}
 	}
-
 	if len(fields)%4 != 0 {
 		return nil, fmt.Errorf("字段数 %d 不是 4 的倍数", len(fields))
 	}
-
-	// 小工具： 统一成十六进制大写（移除分隔符）
 	normalizeHex12 := func(s string) (string, error) {
 		s = strings.ToUpper(s)
 		s = strings.ReplaceAll(s, ":", "")
@@ -67,12 +62,10 @@ func parseBuffer(buf string) ([]config.NodeTopology, error) {
 		}
 		return s, nil
 	}
-
 	count := len(fields) / 4
 	list := make([]config.NodeTopology, 0, count)
 	for i := 0; i < count; i++ {
 		j := i * 4
-
 		eid, err := normalizeHex12(fields[j])
 		if err != nil {
 			return nil, fmt.Errorf("第 %d 个节点 EID 错误: %w", i, err)
@@ -81,12 +74,11 @@ func parseBuffer(buf string) ([]config.NodeTopology, error) {
 		if err != nil {
 			return nil, fmt.Errorf("第 %d 个节点 Parent 错误: %w", i, err)
 		}
-
 		list = append(list, config.NodeTopology{
-			EID:    eid,         // 12位HEX（大写）
-			Type:   fields[j+1], // 原样保留（若需要可再做校验）
-			State:  fields[j+2], // 原样保留（若需要可再做校验/映射）
-			Parent: parent,      // 12位HEX（大写）
+			EID:    eid,         //12位HEX
+			Type:   fields[j+1], //原样保留
+			State:  fields[j+2], //原样保留
+			Parent: parent,      //12位HEX
 		})
 	}
 	return list, nil

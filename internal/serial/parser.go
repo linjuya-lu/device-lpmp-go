@@ -19,8 +19,8 @@ import (
 
 var (
 	HealthTopoMu   sync.RWMutex
-	HealthTopo     []config.NodeTopology // 巡检得到的拓扑
-	HealthTopoTime time.Time             // 巡检时间戳
+	HealthTopo     []config.NodeTopology // 拓扑
+	HealthTopoTime time.Time             // 时间戳
 )
 
 type topoParser struct {

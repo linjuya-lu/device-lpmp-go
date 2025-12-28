@@ -13,7 +13,6 @@ import (
 )
 
 func (d *LpMpDriver) handleLoadParamMap(c echo.Context) error {
-	// Content-Type: multipart/form-data, 字段名为file
 	fh, err := c.FormFile("file")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]any{
@@ -63,36 +62,32 @@ func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
 	fillDescIfPossible := func(node *config.NodeTopology) {
 		devName, ok := config.LookupDeviceName(node.EID)
 		if !ok {
-			// 没有做EID映射，不填desc
 			d.lc.Infof("handleGetTopology: eid=%s 无EID映射，Desc不填充", node.EID)
 			return
 		}
-		// 有映射，从metadata取设备
 		dev, err := d.sdk.GetDeviceByName(devName)
 		if err != nil {
-			// 不填desc
 			d.lc.Infof("handleGetTopology: 根据设备名%s获取设备失败:%v，Desc 不填充", devName, err)
 			return
 		}
 		desc := strings.TrimSpace(dev.Description)
 		if desc == "" {
-			// 设备没配置 description，不填 Desc
 			d.lc.Debugf("handleGetTopology: 设备 %s (eid=%s) 未配置 description，Desc 不填充", devName, node.EID)
 			return
 		}
 		node.Desc = desc
 	}
-	// 过滤拓扑、按规则填充Desc
+
 	filterByMapping := func(nodes []config.NodeTopology) []config.NodeTopology {
 		filtered := make([]config.NodeTopology, 0, len(nodes))
 		for _, n := range nodes {
-			// EID == EidStr，保留
+			// EID==EidStr，保留
 			if n.EID == config.EidStr {
 				fillDescIfPossible(&n)
 				filtered = append(filtered, n)
 				continue
 			}
-			// 其他节点：EID映射才保留
+			// 其他节点
 			if _, ok := config.LookupDeviceName(n.EID); !ok {
 				d.lc.Debugf(
 					"handleGetTopology: 丢弃脏拓扑节点eid=%s",
@@ -108,7 +103,6 @@ func (d *LpMpDriver) handleGetTopology(c echo.Context) error {
 	}
 	topo, ts := serial.GetHealthTopology()
 	if len(topo) == 0 {
-		// 缓存没有，实时查询
 		ctx := c.Request().Context()
 		rt, err := serial.QueryAllTopology(ctx)
 		if err != nil {

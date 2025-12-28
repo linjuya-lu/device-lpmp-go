@@ -9,19 +9,15 @@ import (
 
 func ParseDefaultValue(valStr, vt string) any {
 	vt = strings.TrimSpace(vt)
-
 	switch vt {
 	case "Float32":
-		// 默认值没写，直接给 0.0
 		if valStr == "" {
 			return float32(0)
 		}
 		if f, err := strconv.ParseFloat(valStr, 32); err == nil {
 			return float32(f)
 		}
-		// 解析失败也不要返回 string，直接给 0
 		return float32(0)
-
 	case "Uint16":
 		if valStr == "" {
 			return uint16(0)
@@ -30,7 +26,6 @@ func ParseDefaultValue(valStr, vt string) any {
 			return uint16(u)
 		}
 		return uint16(0)
-
 	case "Uint8":
 		if valStr == "" {
 			return uint8(0)
@@ -39,7 +34,6 @@ func ParseDefaultValue(valStr, vt string) any {
 			return uint8(u)
 		}
 		return uint8(0)
-
 	case "Bool":
 		if valStr == "" {
 			return false
@@ -48,7 +42,6 @@ func ParseDefaultValue(valStr, vt string) any {
 			return b
 		}
 		return false
-
 	case "Float32Array":
 		if valStr == "" {
 			return []float32{}
@@ -58,7 +51,6 @@ func ParseDefaultValue(valStr, vt string) any {
 			return arr
 		}
 		return []float32{}
-
 	case "Object":
 		if valStr == "" {
 			return map[string]any{}
@@ -68,13 +60,9 @@ func ParseDefaultValue(valStr, vt string) any {
 			return obj
 		}
 		return map[string]any{}
-
 	case "String":
-		// 明确是字符串时才原样返回
 		return valStr
 	}
-
-	// 未知类型统统按 string 处理
 	return valStr
 }
 
@@ -105,7 +93,6 @@ func GetDeviceValues(deviceName string) (map[string]any, bool) {
 	if !ok {
 		return nil, false
 	}
-
 	copyMap := make(map[string]any, len(vals))
 	for k, v := range vals {
 		copyMap[k] = v

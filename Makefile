@@ -2,7 +2,6 @@
 
 ENABLE_FULL_RELRO=true
 ENABLE_PIE=false
-
 MICROSERVICES=cmd/device-lpmp
 ARCH ?= aarch64
 
@@ -25,7 +24,6 @@ else
 endif
 
 export GOOS GOARCH GOARM
-
 SDKVERSION=$(shell cat ./go.mod | grep 'github.com/edgexfoundry/device-sdk-go/v4 v' | sed 's/require//g' | awk '{print $$2}')
 
 ifeq ($(ENABLE_FULL_RELRO), true)

@@ -13,5 +13,4 @@ const (
 func main() {
 	d := driver.LpMpDeviceDriver()
 	startup.Bootstrap(serviceName, Version, d)
-
 }

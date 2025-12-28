@@ -11,7 +11,7 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
-// 拓扑全量查询 + 写缓存 + 基于拓扑上报 state
+// 健康检查
 func (d *LpMpDriver) runOneHealthCheck(parentCtx context.Context) {
 	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 	defer cancel()
@@ -20,33 +20,23 @@ func (d *LpMpDriver) runOneHealthCheck(parentCtx context.Context) {
 		d.lc.Errorf("健康检查：拓扑查询失败: %v", err)
 		return
 	}
-	// 更新健康缓存
 	serial.HealthTopoMu.Lock()
 	serial.HealthTopo = topo
 	serial.HealthTopoTime = time.Now()
 	serial.HealthTopoMu.Unlock()
-
 	d.lc.Infof("健康检查：拓扑刷新完成，节点数=%d", len(topo))
-
-	// 直接用这次查询到的 topo 做一次 state 上报
 	d.reportDevicesStateFromTopo(topo)
 }
 
-// 健康检查
 func (d *LpMpDriver) startHealthCheckLoop(ctx context.Context, lc logger.LoggingClient) {
 	go func() {
-		// 启动时先跑一轮
 		d.runOneHealthCheck(ctx)
-
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
-
 		for {
 			select {
 			case <-ticker.C:
-				// 每分钟跑一次健康检查 + state 上报
 				d.runOneHealthCheck(ctx)
-
 			case <-ctx.Done():
 				lc.Infof("健康检查循环结束: %v", ctx.Err())
 				return
@@ -55,28 +45,24 @@ func (d *LpMpDriver) startHealthCheckLoop(ctx context.Context, lc logger.Logging
 	}()
 }
 
-// 遍历路由表，根据 Topology.State 字段给每个设备异步上报 state 资源
 func (d *LpMpDriver) reportDevicesStateFromTopo(topo []config.NodeTopology) {
 	if len(topo) == 0 {
 		d.lc.Debug("healthCheck: topo 为空，跳过 state 上报")
 		return
 	}
-
 	for _, n := range topo {
-		// EID -> deviceName
+		// EID->deviceName
 		deviceName, ok := config.LookupDeviceName(n.EID)
 		if !ok {
 			d.lc.Debugf("healthCheck: EID=%s 未绑定 EdgeX 设备，跳过", n.EID)
 			continue
 		}
-
-		// 解析 online 状态：1=在线，0=离线
+		// 状态：1=在线，0=离线
 		s := strings.TrimSpace(n.State)
 		if s == "" {
 			d.lc.Warnf("healthCheck: 设备 %s (EID=%s) state 为空，跳过", deviceName, n.EID)
 			continue
 		}
-
 		u, err := strconv.ParseUint(s, 10, 8)
 		if err != nil {
 			d.lc.Warnf("healthCheck: 设备 %s (EID=%s) state=%q 解析失败: %v",
@@ -84,12 +70,9 @@ func (d *LpMpDriver) reportDevicesStateFromTopo(topo []config.NodeTopology) {
 			continue
 		}
 		stateVal := uint8(u) // 0 或 1
-
 		values := map[string]any{
 			"state": stateVal,
 		}
-
-		// 只上报一个资源：state
 		d.AsyncReporting(deviceName, "state", values)
 	}
 }

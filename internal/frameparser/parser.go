@@ -109,7 +109,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 					idx += 3
 				}
 				log.Printf("lenFlag=%d dataLen=%d idx=%d frameLen=%d", lenFlag, dataLen, idx, len(frame))
-
 				// 解析数据
 				valBytes := frame[idx : idx+int(dataLen)]
 				idx += int(dataLen)
@@ -160,7 +159,6 @@ func StartParser(frameCh <-chan []byte, cb CallbackFunc) {
 
 // 监测数据响应报文
 func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen byte) error {
-
 	keyBytes, err := hex.DecodeString(config.EidStr)
 	if err != nil {
 		return errors.New("invalid sensorKey hex: " + err.Error())
@@ -168,10 +166,8 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	if len(keyBytes) != 6 {
 		return errors.New("sensorKey hex must decode to 6 bytes")
 	}
-
 	const fragInd = 0
 	header := (dataLen<<4)&0xF0 | (fragInd<<3)&0x08 | (packetType & 0x07)
-
 	packet := make([]byte, 0, len(keyBytes)+1+1+2)
 	packet = append(packet, keyBytes...)
 	packet = append(packet, header)
@@ -179,7 +175,6 @@ func SendDataStatus(sensorKey string, packetType byte, dataStatus byte, dataLen 
 	//CRC16
 	crc := config.CRC16(packet)
 	packet = append(packet, byte(crc>>8), byte(crc&0xFF))
-
 	serial.SendFrame(sensorKey, packet)
 	return nil
 }

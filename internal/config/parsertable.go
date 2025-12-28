@@ -9,8 +9,8 @@ import (
 )
 
 type ParamKey struct {
-	FeatureBits byte   // 参量特征
-	CodeBits    uint16 // 类型编码
+	FeatureBits byte   //参量特征
+	CodeBits    uint16 //类型编码
 }
 
 type ParamInfo struct {
@@ -21,7 +21,6 @@ type ParamInfo struct {
 func GetParamInfo(key ParamKey) (ParamInfo, bool) {
 	paramMu.RLock()
 	defer paramMu.RUnlock()
-
 	info, ok := paramMap[key]
 	return info, ok
 }
@@ -47,12 +46,10 @@ func LookupParamInfo(paramType uint16) (ParamInfo, bool) {
 	paramMu.RLock()
 	info, ok := paramMap[key]
 	paramMu.RUnlock()
-
 	return info, ok
 }
 
-// ===================== 通用解析函数 =====================
-
+// 通用解析函数
 func parseFloat32(data []byte) (any, error) {
 	if len(data) != 4 {
 		return nil, fmt.Errorf("期望4字节，实际%d", len(data))
@@ -129,7 +126,6 @@ func ParseTopo(data []byte) (any, error) {
 			data[i+8] == 0x2C &&
 			data[i+10] == 0x2C
 	}
-	// 字节转字符串
 	toHex12 := func(b []byte) string {
 		const hexdigits = "0123456789ABCDEF"
 		dst := make([]byte, 12)
@@ -182,7 +178,6 @@ func ParseTopo(data []byte) (any, error) {
 			return nil, fmt.Errorf("节点缺少逗号分隔(3)")
 		}
 		i++
-		// parent(6)
 		if i+6 > n {
 			return nil, fmt.Errorf("节点缺少父EID字节")
 		}
@@ -209,7 +204,7 @@ func ParseTopo(data []byte) (any, error) {
 	// 合并
 	now := time.Now()
 	topoMu.Lock()
-	// 超时：开始新一轮，自动清空
+	// 超时
 	if topoIdleTTL > 0 && !topoLastAt.IsZero() && now.Sub(topoLastAt) > topoIdleTTL {
 		TopoList = TopoList[:0]
 		topoIndex = make(map[string]int)

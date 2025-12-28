@@ -26,6 +26,7 @@ var auchCRCHi = [256]byte{
 	0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
 	0x81, 0x40,
 }
+
 var auchCRCLo = [256]byte{
 	0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 0x07, 0xC7, 0x05, 0xC5,
 	0xC4, 0x04, 0xCC, 0x0C, 0x0D, 0xCD, 0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B,
@@ -59,7 +60,6 @@ func CRC16(data []byte) uint16 {
 }
 
 func SendFrame(dstAddr string, payload []byte) {
-
 	var parts []string
 	for _, b := range payload {
 		parts = append(parts, fmt.Sprintf("%02X", b))
@@ -74,25 +74,19 @@ func RestCommandBuildFrame(eidStr string, sensorID [6]byte, requestSetFlag byte,
 	if requestSetFlag != 0 && requestSetFlag != 1 {
 		return fmt.Errorf("invalid requestSetFlag %d, must be 0 or 1", requestSetFlag)
 	}
-
 	buf := make([]byte, 0, 6+1+1+4+2)
 	buf = append(buf, sensorID[:]...)
 	head := byte(0<<4) | byte(0<<3) | byte(0x04&0x07)
 	buf = append(buf, head)
-
 	ctrlByte := byte((0x04&0x7F)<<1) | (requestSetFlag & 0x01)
 	buf = append(buf, ctrlByte)
-
 	tsBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(tsBytes, timestamp)
 	buf = append(buf, tsBytes...)
-
 	crc := CRC16(buf)
 	crcBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(crcBytes, crc)
 	buf = append(buf, crcBytes...)
-
 	SendFrame(eidStr, buf)
-
 	return nil
 }

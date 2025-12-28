@@ -10,9 +10,9 @@ import (
 	"github.com/linjuya-lu/device-lpmp-go/internal/serial"
 )
 
-// 时间设置封装
+// 时间设置
 func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
-	// EID
+	//EID
 	eidValue, ok := config.GetDeviceValue(deviceName, "eid")
 	if !ok {
 		err := fmt.Errorf("设备 %s 的 EID 未初始化", deviceName)
@@ -33,10 +33,8 @@ func (d *LpMpDriver) handleTimeParameterSet(deviceName string) error {
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
 	// 复位帧
-	loc := time.FixedZone("UTC-0", 0) // UTC
+	loc := time.FixedZone("UTC-0", 0)
 	ts := uint32(time.Now().In(loc).Unix())
-
-	// 发送
 	reqFrame, _ := frameparser.BuildTimeParamFrame(sensorID, 1, ts)
 	eidStr, _ := eidValue.(string)
 	serial.SendFrame(eidStr, reqFrame)
@@ -52,7 +50,6 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-	// 解码6字节
 	eidBytes, err := hex.DecodeString(config.EidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", config.EidStr, err)
@@ -66,11 +63,8 @@ func (d *LpMpDriver) handleResetCommand(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-	// 构建复位帧
 	reqFrame, _ := frameparser.BuildResetRequest(sensorID)
-	// 发送命令
 	eidStr, _ := eidValue.(string)
-
 	serial.SendFrame(eidStr, reqFrame)
 	d.lc.Infof("发送复位命令到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil
@@ -84,7 +78,6 @@ func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 		d.lc.Error(err.Error())
 		return err
 	}
-	// 解码成 6 字节
 	eidBytes, err := hex.DecodeString(config.EidStr)
 	if err != nil {
 		err = fmt.Errorf("EID[%s] 转十六进制失败: %w", config.EidStr, err)
@@ -98,13 +91,11 @@ func (d *LpMpDriver) handleIdMoniDataQuery(deviceName string) error {
 	}
 	var sensorID [6]byte
 	copy(sensorID[:], eidBytes)
-	//工况查询帧
 	frame, err := frameparser.BuildMonitoringDataQueryFrame(sensorID)
 	if err != nil {
 		return fmt.Errorf("构造全部通用参数查询失败: %w", err)
 	}
 	eidStr, _ := eidValue.(string)
-	//发送命令
 	serial.SendFrame(eidStr, frame)
 	d.lc.Infof("发送工况查询帧到设备 %s (EID: %s)", deviceName, eidStr)
 	return nil

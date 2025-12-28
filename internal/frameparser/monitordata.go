@@ -8,8 +8,8 @@ import (
 
 const (
 	packetType     = 0x04
-	fragInd        = 0 // 1bit，未分片
-	requestSetFlag = 0 // 1bit，查询
+	fragInd        = 0 //未分片
+	requestSetFlag = 0 //查询
 )
 
 // 工况查询
